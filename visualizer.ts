@@ -35,7 +35,7 @@ export class Visualizer {
   private source: MediaStreamAudioSourceNode | null = null;
   private element: HTMLAudioElement | null = null;
   private freq = new Uint8Array(1024);
-  private wave = new Uint8Array(2048);
+  private timeData = new Uint8Array(2048);
   private silentSince = 0;
   private hasSignal = false;
   private tried = new Set<HTMLAudioElement>();
@@ -51,8 +51,9 @@ export class Visualizer {
   private bins = { rate: 0, edges: [] as number[], bassFrom: 1, bassTo: 2 };
   private gradient: CanvasGradient | null = null;
   private gradientKey = '';
-  private waveFill: CanvasGradient | null = null;
-  private waveGradientKey = '';
+  // Wave mode: per-point heights and x positions, reused every frame
+  private waveLevels = new Float32Array(BARS * 2 - 1);
+  private waveXs = new Float32Array(BARS * 2 - 1);
   private settled = false;
   private lastColor = '';
   private resize: ResizeObserver;
@@ -138,7 +139,7 @@ export class Visualizer {
     this.settled = !moving && (!playing || this.opacity === 0);
     if (this.mode === 'bars') {
       const gap = 3 * dpr, bw = (w - gap * (BARS - 1)) / BARS;
-      g.fillStyle = this.barGradient(color, h);
+      g.fillStyle = this.fillGradient(color, h);
       for (let i = 0; i < BARS; i++) {
         const bh = Math.max(2 * dpr, this.smooth[i] * h);
         g.beginPath();
@@ -146,30 +147,14 @@ export class Visualizer {
         g.fill();
       }
     } else {
-      // Bass at both edges (beside the controls, where it stays visible) and treble in the middle,
-      // mirrored above and below the centre line
-      const mid = h / 2, amp = h * 0.46, n = BARS * 2 - 1;
-      const band = (k: number) => this.smooth[BARS - 1 - Math.abs(k - (BARS - 1))];
-      // A light blur across neighbouring bands softens the lobes
-      const level = (k: number) =>
-        Math.max(0.015, (band(Math.max(0, k - 1)) + 2 * band(k) + band(Math.min(n - 1, k + 1))) / 4) * amp;
-      const x = (k: number) => (k / (n - 1)) * w;
-      // Quadratic segments through the midpoints give a smooth curve; sign -1 traces the top edge
-      const trace = (sign: number, reverse: boolean) => {
-        for (let s = 1; s < n - 1; s++) {
-          const k = reverse ? n - 1 - s : s, next = reverse ? k - 1 : k + 1;
-          g.quadraticCurveTo(x(k), mid + sign * level(k), (x(k) + x(next)) / 2, mid + sign * (level(k) + level(next)) / 2);
-        }
-        const last = reverse ? 0 : n - 1;
-        g.lineTo(x(last), mid + sign * level(last));
-      };
+      this.waveShape(w, h * 0.46);
+      const mid = h / 2;
       g.beginPath();
-      g.moveTo(0, mid - level(0));
-      trace(-1, false);
-      g.lineTo(w, mid + level(n - 1));
-      trace(1, true);
+      g.moveTo(0, mid - this.waveLevels[0]);
+      this.traceWave(mid, -1, false);
+      this.traceWave(mid, 1, true);
       g.closePath();
-      g.fillStyle = this.waveGradient(color, h);
+      g.fillStyle = this.fillGradient(color, h);
       g.fill();
       // Glowing outline on both edges
       g.lineWidth = 2 * dpr;
@@ -203,6 +188,30 @@ export class Visualizer {
     return moving;
   }
 
+  // Wave heights: bass at both edges (beside the controls, where it stays visible) and treble in the
+  // middle, with a light blur across neighbouring bands to soften the lobes
+  private waveShape(w: number, amp: number) {
+    const n = this.waveLevels.length;
+    const band = (k: number) => this.smooth[BARS - 1 - Math.abs(clamp(k, 0, n - 1) - (BARS - 1))];
+    for (let k = 0; k < n; k++) {
+      this.waveLevels[k] = Math.max(0.015, (band(k - 1) + 2 * band(k) + band(k + 1)) / 4) * amp;
+      this.waveXs[k] = (k / (n - 1)) * w;
+    }
+  }
+
+  // One edge of the wave, mirrored around `mid` (sign -1 is the top edge), as quadratic segments through the midpoints
+  private traceWave(mid: number, sign: number, reverse: boolean) {
+    const { g, waveLevels: lv, waveXs: xs } = this, n = lv.length;
+    const first = reverse ? n - 1 : 0;
+    g.lineTo(xs[first], mid + sign * lv[first]);
+    for (let s = 1; s < n - 1; s++) {
+      const k = reverse ? n - 1 - s : s, next = reverse ? k - 1 : k + 1;
+      g.quadraticCurveTo(xs[k], mid + sign * lv[k], (xs[k] + xs[next]) / 2, mid + sign * (lv[k] + lv[next]) / 2);
+    }
+    const last = reverse ? 0 : n - 1;
+    g.lineTo(xs[last], mid + sign * lv[last]);
+  }
+
   // Bass energy drives `level`; jumps above its running average drive `pulse`
   private updateLevels(live: boolean) {
     if (!live) {
@@ -220,9 +229,9 @@ export class Visualizer {
   // Keeps the analyser attached to an <audio> element that actually produces sound
   private updateSource(playing: boolean, now: number) {
     if (this.analyser && playing) {
-      this.analyser.getByteTimeDomainData(this.wave);
+      this.analyser.getByteTimeDomainData(this.timeData);
       let silent = true;
-      for (let i = 0; i < this.wave.length; i++) if (Math.abs(this.wave[i] - 128) >= 2) { silent = false; break; }
+      for (let i = 0; i < this.timeData.length; i++) if (Math.abs(this.timeData[i] - 128) >= 2) { silent = false; break; }
       if (!silent) { this.silentSince = 0; this.hasSignal = true; return; }
       this.silentSince ||= now;
       if (now - this.silentSince < SILENCE_MS) return;
@@ -300,24 +309,21 @@ export class Visualizer {
     return sum / (to - from) / 255;
   }
 
-  private waveGradient(color: string, h: number) {
-    const key = `${color}|${h}`;
-    if (key !== this.waveGradientKey || !this.waveFill) {
-      this.waveFill = this.g.createLinearGradient(0, 0, 0, h);
-      this.waveFill.addColorStop(0, 'rgba(255,255,255,0)');
-      this.waveFill.addColorStop(0.5, color);
-      this.waveFill.addColorStop(1, 'rgba(255,255,255,0)');
-      this.waveGradientKey = key;
-    }
-    return this.waveFill;
-  }
-
-  private barGradient(color: string, h: number) {
-    const key = `${color}|${h}`;
+  // Bars fade upwards from the accent; the wave fades from its centre line to both edges
+  private fillGradient(color: string, h: number) {
+    const key = `${this.mode}|${color}|${h}`;
     if (key !== this.gradientKey || !this.gradient) {
-      this.gradient = this.g.createLinearGradient(0, h, 0, 0);
-      this.gradient.addColorStop(0, color);
-      this.gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      const clear = 'rgba(255,255,255,0)';
+      if (this.mode === 'bars') {
+        this.gradient = this.g.createLinearGradient(0, h, 0, 0);
+        this.gradient.addColorStop(0, color);
+        this.gradient.addColorStop(1, clear);
+      } else {
+        this.gradient = this.g.createLinearGradient(0, 0, 0, h);
+        this.gradient.addColorStop(0, clear);
+        this.gradient.addColorStop(0.5, color);
+        this.gradient.addColorStop(1, clear);
+      }
       this.gradientKey = key;
     }
     return this.gradient;

@@ -146,7 +146,12 @@ export function createScreen(api: any) {
   };
 
   const lyrics = new LyricsPanel(api, q('.lyrics'), (s) => api.Playback.seekTo(s));
-  const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'), (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
+  const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'),
+    {
+      never: ['.timeline', '.dock', '.back', '.clock', '.corner', '.upnext', '.settings-panel'].map((s) => q(s)),
+      ifRoom: ['.cover-wrap', '.info'].map((s) => q(s)),
+    },
+    (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
   const viz = new Visualizer(q<HTMLCanvasElement>('.viz'), () => accentColor);
   const effects = new Effects({
     wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine i'),
