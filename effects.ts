@@ -14,6 +14,7 @@ const EASE = 0.06; // fraction of the remaining distance covered per frame
 const IDLE_DRIFT = { x: 0.35, y: 0.25, speedX: 0.35, speedY: 0.27 };
 const SHINE_SHIFT = 22; // % the shine travels opposite to the tilt
 const BACKDROP_SHIFT = 1.2; // % the background drifts
+const BACKDROP_KICK = { shake: 0.9, zoom: 0.03 }; // % shake and extra scale of the background on a full kick
 const INFO_SHIFT = { x: 6, y: 4 }; // px the title block drifts
 
 type Elements = {
@@ -69,7 +70,11 @@ export class Effects {
     this.set(glow, 'transform', `scale(${(1 + level * 0.12 + pulse * 0.08).toFixed(3)})`);
     this.set(shine, 'transform', `translate(${(-c.x * SHINE_SHIFT).toFixed(1)}%, ${(-c.y * SHINE_SHIFT).toFixed(1)}%)`);
     this.set(flash, 'opacity', (pulse * 0.28).toFixed(3));
-    this.set(backdrop, 'translate', `${(-c.x * BACKDROP_SHIFT).toFixed(2)}% ${(-c.y * BACKDROP_SHIFT).toFixed(2)}%`);
+    // The background jolts on each kick: a short random shake plus a slight zoom
+    const shake = pulse * pulse * BACKDROP_KICK.shake;
+    const sx = -c.x * BACKDROP_SHIFT + (Math.random() * 2 - 1) * shake, sy = -c.y * BACKDROP_SHIFT + (Math.random() * 2 - 1) * shake;
+    this.set(backdrop, 'translate', `${sx.toFixed(2)}% ${sy.toFixed(2)}%`);
+    this.set(backdrop, 'scale', (1 + pulse * BACKDROP_KICK.zoom).toFixed(4));
     this.set(info, 'translate', `${(-c.x * INFO_SHIFT.x).toFixed(1)}px ${(-c.y * INFO_SHIFT.y).toFixed(1)}px`);
   }
 
