@@ -24,8 +24,14 @@ const TREBLE_BOOST = 0.3; // higher bands carry less energy
 // Beat detection on the bass band
 const BASS_LO_HZ = 40;
 const BASS_HI_HZ = 160;
-const KICK_THRESHOLD = 1.05; // a kick is bass above 105 % of its running average
-const KICK_GAIN = 4;
+// A kick is how far the bass jumps above the valley between hits, relative to recent hits. The valley
+// falls fast and rises slowly, so kicks stand out even in music whose bass never lets up (hardcore).
+const VALLEY_FALL = 0.3;
+const VALLEY_RISE = 0.015;
+const KICK_RANGE_DECAY = 0.995; // per frame: how quickly the reference for a strong hit is forgotten
+const KICK_MIN_RANGE = 0.04;
+const KICK_FLOOR = 0.3; // fraction of a strong hit ignored, so small bumps do not count
+const KICK_DECAY = 0.86;
 const SETTLE_EPSILON = 1e-3;
 
 export class Visualizer {
@@ -58,7 +64,8 @@ export class Visualizer {
   private lastColor = '';
   private resize: ResizeObserver;
   private analyze = false; // keep analysing for the beat effects even when the bars are off
-  private slowBass = 0;
+  private valley = 0;
+  private kickRange = 0;
   private bassLevel = 0;
   private kick = 0;
 
@@ -222,8 +229,11 @@ export class Visualizer {
     const { bassFrom, bassTo } = this.bands();
     const bass = this.bandAvg(bassFrom, bassTo);
     this.bassLevel += (bass - this.bassLevel) * (bass > this.bassLevel ? 0.5 : 0.08);
-    this.slowBass += (bass - this.slowBass) * 0.02;
-    this.kick = Math.max(clamp((bass - this.slowBass * KICK_THRESHOLD) * KICK_GAIN, 0, 1), this.kick * 0.88);
+    this.valley += (bass - this.valley) * (bass < this.valley ? VALLEY_FALL : VALLEY_RISE);
+    const rise = Math.max(0, bass - this.valley);
+    this.kickRange = Math.max(rise, this.kickRange * KICK_RANGE_DECAY, KICK_MIN_RANGE);
+    const hit = clamp((rise / this.kickRange - KICK_FLOOR) / (1 - KICK_FLOOR), 0, 1);
+    this.kick = Math.max(hit, this.kick * KICK_DECAY);
   }
 
   // Keeps the analyser attached to an <audio> element that actually produces sound
@@ -266,7 +276,7 @@ export class Visualizer {
       this.ctx.resume().catch(() => {});
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.75;
+      this.analyser.smoothingTimeConstant = 0.55; // low enough to keep kick transients sharp
       // Wider range than the default (-100 to -30 dB), which saturates on loud masters
       this.analyser.minDecibels = -90;
       this.analyser.maxDecibels = -10;
@@ -332,6 +342,6 @@ export class Visualizer {
   private disconnect() {
     try { this.source?.disconnect(); } catch { /* already disconnected */ }
     this.source = null; this.analyser = null; this.element = null; this.hasSignal = false;
-    this.bassLevel = 0; this.kick = 0; this.slowBass = 0; this.peak = 0;
+    this.bassLevel = 0; this.kick = 0; this.valley = 0; this.kickRange = 0; this.peak = 0;
   }
 }
