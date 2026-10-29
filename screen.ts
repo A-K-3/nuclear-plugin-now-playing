@@ -1,6 +1,7 @@
 // Now Playing screen: artwork, track info, timeline, controls, favorite, lyrics, SoundCloud
 // comments, visualizer and a queue that can be searched, reordered, resized and collapsed.
 import { SoundCloudComments } from './comments';
+import { appWindow, onDragRegionMouseDown } from './appwindow';
 import { Effects } from './effects';
 import { locale, t } from './i18n';
 import { ICON, svg } from './icons';
@@ -24,12 +25,18 @@ const html = () => `
 <div class="app">
   <section class="player">
     <canvas class="viz"></canvas>
+    <div class="dragbar"></div>
     <button data-act="close" class="back" title="${t('backTitle')}">${svg(ICON.back)}<span>${t('back')}</span></button>
     <div class="clock"></div>
     <div class="corner">
       <button data-act="comments" class="ctoggle" title="${t('commentsTitle')}">${svg(ICON.comment)}</button>
       <button data-act="queue" class="qtoggle" title="${t('queueToggleTitle')}">${svg(ICON.list)}</button>
       <button data-act="full" title="${t('fullscreenTitle')}">${svg(ICON.full)}</button>
+      <span class="winctl">
+        <button data-act="winMin" title="${t('winMinimize')}">${svg(ICON.winMin)}</button>
+        <button data-act="winMax" title="${t('winMaximize')}">${svg(ICON.winMax)}</button>
+        <button data-act="winClose" class="winclose" title="${t('winClose')}">${svg(ICON.close)}</button>
+      </span>
     </div>
     <div class="stage">
       <div class="main">
@@ -531,6 +538,9 @@ export function createScreen(api: any) {
     full: fullscreen,
     close: () => hide(),
     escape: () => { if (!document.fullscreenElement) hide(); },
+    winMin: appWindow.minimize,
+    winMax: appWindow.toggleMaximize,
+    winClose: appWindow.close,
   };
   const KEYS: Record<string, string> = {
     Space: 'toggle', ArrowRight: 'next', ArrowLeft: 'prev', ArrowUp: 'volUp', ArrowDown: 'volDown',
@@ -550,6 +560,11 @@ export function createScreen(api: any) {
     if (!li) return;
     if (target.closest('.x')) api.Queue.removeByIds([li.dataset.id]);
     else api.Queue.goToIndex(+li.dataset.i!);
+  });
+
+  // The screen covers Nuclear's title bar: its top strip and the queue header move the window instead
+  root.addEventListener('mousedown', (e) => {
+    if ((e.target as HTMLElement).closest('.dragbar, .queue header')) onDragRegionMouseDown(e);
   });
 
   // While open, the screen owns the keyboard (keys do not reach Nuclear's shortcuts)
@@ -623,6 +638,10 @@ export function createScreen(api: any) {
       renderPlayback(playback);
     } catch { /* Nuclear not ready */ }
     setLyrics(!!prefs?.lyrics);
+    // Window buttons only when Nuclear draws its own title bar (the one the screen covers)
+    Promise.resolve(api.Settings.getGlobal?.('core.appearance.customTitleBar'))
+      .then((custom) => root.classList.toggle('custom-titlebar', !!custom && appWindow.available))
+      .catch(() => {});
     renderTrack(); renderQueue(true);
     unsubs.push(api.Queue.subscribe((qu: any) => { queue = qu; renderTrack(); renderQueue(); }));
     unsubs.push(api.Playback.subscribe((s: any) => { renderPlayback(s); renderCount(); }));
