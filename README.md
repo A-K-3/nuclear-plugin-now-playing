@@ -20,7 +20,8 @@ Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, des
 - **Now Playing screen.** Full-bleed artwork with a blurred, color-matched background, plus title, artist, album, seek bar, volume and playback controls.
 - **Synced lyrics.** Line- and word-level highlighting from any lyrics provider installed in Nuclear. Click a line to seek.
 - **SoundCloud timed comments.** Comments appear at the exact second they were posted, with markers on the timeline. This works for songs streamed from any source.
-- **Audio visualizer.** Frequency bars or waveform, driven by the actual audio output.
+- **Audio visualizer.** Frequency bars or waveform, driven by the actual audio output, with automatic gain so loud masters stay readable.
+- **Motion effects.** The artwork tilts in 3D towards the cursor with a glass shine, breathes with the bass and flips in on track changes. A beat-reactive glow and light pulse follow the music.
 - **Queue panel.** Search, drag to reorder, remove, resize, collapse and save the queue as a playlist.
 - **Up next.** A card previews the next song during the last 10 seconds.
 - **Favorites.** Like the current song without leaving the screen.
@@ -69,6 +70,7 @@ Available under **Settings → Now Playing**:
 | Setting | Default |
 |---|---|
 | Background blur | 80 px |
+| Motion effects | On (off when the OS reduces motion) |
 | Animated background | On |
 | Visualizer (off, bars or wave) | Bars |
 | Show clock | Off |
@@ -96,7 +98,8 @@ index.ts        plugin lifecycle (onLoad / onEnable / onDisable)
 screen.ts       Now Playing screen and queue panel
 lyrics.ts       synced lyrics panel
 comments.ts     SoundCloud timed comments
-visualizer.ts   audio visualizer
+visualizer.ts   audio visualizer and beat detection
+effects.ts      3D tilt, glow, pulse and flip effects
 importer.ts     Spotify importer (playlist provider + settings widget)
 autoskip.ts     skip songs that fail to load
 doubleclick.ts  double-click to play

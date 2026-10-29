@@ -1,3 +1,4 @@
 node_modules/
 plugin.zip
 *.log
+nuclear-logs-*.txt

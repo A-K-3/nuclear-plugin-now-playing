@@ -22,7 +22,8 @@ ${R} input { font:inherit; color:var(--fg); background:rgba(255,255,255,.08); bo
   padding:7px 10px; outline:none; width:100%; user-select:text; }
 ${R} input:focus { border-color:var(--accent); }
 
-/* Background: blurred artwork (optionally animated) + tint + vignette */
+/* Background: blurred artwork (optionally animated) + tint + vignette. The backdrop drifts with the cursor */
+${R} .backdrop { position:absolute; inset:0; will-change:translate; }
 ${R} .bg { position:absolute; inset:-15%; background:center/cover no-repeat; filter:blur(var(--blur)) brightness(.5) saturate(1.5);
   transform:scale(1.15); transition:opacity 1s; }
 ${R} .blobs { position:absolute; inset:0; overflow:hidden; display:none; }
@@ -41,6 +42,9 @@ ${R}.animated .bg { animation:npx-drift 40s ease-in-out infinite alternate; }
 ${R} .tint { position:absolute; inset:0; transition:background 1.2s;
   background:radial-gradient(ellipse at 35% 40%, rgba(var(--tint),.35), transparent 65%),
              radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.65) 100%); }
+/* Light pulse on the beat (opacity only, so it stays on the compositor) */
+${R} .pulse { position:absolute; inset:0; opacity:0; pointer-events:none; will-change:opacity; mix-blend-mode:screen;
+  background:radial-gradient(ellipse at 40% 42%, var(--accent), transparent 58%); }
 
 ${R} .app { position:relative; height:100%; display:grid; grid-template-columns:1fr var(--qw,340px); transition:grid-template-columns .3s ease; }
 ${R} .app.resizing { transition:none; cursor:col-resize; }
@@ -51,10 +55,22 @@ ${R} .viz { position:absolute; left:0; right:0; bottom:0; height:24vh; width:100
   mask-image:linear-gradient(to top, #000 30%, transparent); }
 ${R} .stage { position:relative; z-index:1; height:100%; display:flex; align-items:center; justify-content:center; gap:4vw; padding:5vh 4vw; }
 ${R} .main { display:flex; flex-direction:column; align-items:center; gap:2.2vh; min-width:0; flex:0 1 auto; width:100%; max-width:min(80vh, 100%); }
-${R} .cover { position:relative; width:min(52vh,46vw); aspect-ratio:1; margin-bottom:.5vh; transition:width .4s ease; }
+/* Artwork: 3D wrapper (cursor tilt + beat scale), glow behind it, glass shine on top */
+${R} .cover-wrap { position:relative; width:min(52vh,46vw); aspect-ratio:1; margin-bottom:.5vh; transition:width .4s ease;
+  perspective:1400px; transform-style:preserve-3d; will-change:transform; }
+${R} .cover-glow { position:absolute; inset:-10%; border-radius:40px; filter:blur(48px); opacity:.3; pointer-events:none;
+  background:radial-gradient(circle, var(--accent), transparent 68%); will-change:opacity, transform; transition:background 1.2s; }
+${R} .cover { position:relative; width:100%; height:100%; transform-style:preserve-3d; }
 ${R} .cover img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:16px;
   box-shadow:0 40px 100px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.06); transition:opacity .7s; }
 ${R} .cover .empty { position:absolute; inset:0; border-radius:16px; background:var(--faint); }
+${R} .shine { position:absolute; inset:0; border-radius:16px; overflow:hidden; pointer-events:none;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14), inset 0 1px 0 rgba(255,255,255,.28); }
+${R} .shine i { position:absolute; inset:-60%; will-change:transform; mix-blend-mode:overlay; opacity:0; transition:opacity .6s;
+  background:linear-gradient(115deg, transparent 38%, rgba(255,255,255,.55) 48%, rgba(255,255,255,.1) 54%, transparent 64%); }
+${R}.fx .shine i { opacity:1; }
+${R}.fx .cover.flip { animation:npx-flip .9s cubic-bezier(.2,.85,.25,1); }
+@keyframes npx-flip { 0% { transform:rotateY(-80deg) translateZ(-120px) scale(.9); opacity:.2 } 55% { opacity:1 } 100% { transform:none } }
 /* Own compositing layer: without it Chromium renders the title greyish next to the blurred background layers */
 ${R} .info { text-align:center; width:min(76vh,100%); will-change:transform; transform:translateZ(0); }
 ${R} .info div { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -75,8 +91,15 @@ ${R} .sc-markers i { position:absolute; bottom:0; width:2px; margin-left:-1px; b
 ${R} .times { display:flex; justify-content:space-between; font-size:13px; color:var(--dim); font-variant-numeric:tabular-nums; }
 ${R} .times .sc-status { opacity:.8; }
 
+/* Glass dock holding the controls and the volume */
+${R} .dock { display:flex; flex-direction:column; align-items:center; gap:1.4vh; padding:1.6vh clamp(18px,2.4vw,40px) 1.4vh;
+  border-radius:28px; border:1px solid rgba(255,255,255,.12);
+  background:linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.04));
+  backdrop-filter:blur(20px) saturate(1.6);
+  box-shadow:0 24px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.2); }
 ${R} .controls { display:flex; align-items:center; gap:clamp(12px,2vw,36px); }
-${R} .toggle { background:#fff; color:#000; border-radius:50%; padding:16px; opacity:1; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+${R} .toggle { background:#fff; color:#000; border-radius:50%; padding:16px; opacity:1;
+  box-shadow:0 10px 30px rgba(0,0,0,.4), 0 0 40px -6px var(--accent); }
 ${R} .toggle svg { width:40px; height:40px; }
 ${R} .mode svg { width:24px; height:24px; }
 ${R} .mode.off { opacity:.35; }
@@ -96,7 +119,7 @@ ${R} .volume .slider { flex:1; }
 ${R} .lyrics { display:none; flex:1 1 0; max-width:46vw; height:76vh; overflow-y:auto; scrollbar-width:none; position:relative;
   mask-image:linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent); }
 ${R}.show-lyrics .lyrics { display:block; }
-${R}.show-lyrics .cover { width:min(40vh,26vw); }
+${R}.show-lyrics .cover-wrap { width:min(40vh,26vw); }
 ${R}.show-lyrics .main { max-width:min(60vh, 40vw); }
 ${R} .lyr-pad { height:30vh; }
 ${R} .lyr-line { font-size:clamp(18px,3vh,34px); font-weight:700; line-height:1.3; padding:.6vh 0; color:rgba(255,255,255,.38);
@@ -104,7 +127,7 @@ ${R} .lyr-line { font-size:clamp(18px,3vh,34px); font-weight:700; line-height:1.
 ${R} .lyrics.synced .lyr-line { cursor:pointer; }
 ${R} .lyrics.synced .lyr-line:hover { color:rgba(255,255,255,.7); }
 ${R} .lyr-line.past { color:rgba(255,255,255,.22); }
-${R} .lyr-line.active { color:#fff; transform:scale(1.03); }
+${R} .lyr-line.active { color:#fff; transform:scale(1.03); text-shadow:0 0 28px rgba(255,255,255,.35); }
 ${R} .lyr-line .w.sung { color:var(--accent); }
 ${R} .lyrics:not(.synced) .lyr-line { color:rgba(255,255,255,.85); cursor:default; font-weight:600; }
 ${R} .lyr-label { font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin:2vh 0 .5vh; }
@@ -142,7 +165,8 @@ ${R}.idle .corner, ${R}.idle:not(.pin-back) .back { opacity:0; }
 /* "Up next" card and toasts */
 ${R} .upnext { position:absolute; left:20px; bottom:20px; z-index:3; display:flex; gap:12px; align-items:center; padding:10px 18px 10px 10px;
   border-radius:14px; background:rgba(0,0,0,.5); backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(0,0,0,.4);
-  transform:translateY(130%); opacity:0; transition:transform .5s cubic-bezier(.2,.9,.3,1.2), opacity .4s; max-width:min(420px,60%); }
+  transform:perspective(700px) rotateX(-75deg) translateY(40%); transform-origin:50% 100%; opacity:0;
+  transition:transform .7s cubic-bezier(.2,.9,.3,1.15), opacity .4s; max-width:min(420px,60%); }
 ${R} .upnext.show { transform:none; opacity:1; }
 ${R} .upnext img { width:52px; height:52px; border-radius:8px; object-fit:cover; flex:none; }
 ${R} .upnext small { display:block; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
@@ -214,7 +238,7 @@ ${R} .goto.show { opacity:1; transform:translate(-50%, 0); pointer-events:auto; 
   ${R} { overflow:auto; }
   ${R} .app { grid-template-columns:1fr; height:auto; }
   ${R} .stage { flex-direction:column; }
-  ${R} .cover { width:min(80vw,50vh); }
+  ${R} .cover-wrap { width:min(80vw,50vh); }
   ${R} .lyrics { max-width:none; width:100%; height:50vh; }
   ${R} .queue { border-left:0; border-top:1px solid var(--faint); }
   ${R} .queue .resizer { display:none; }

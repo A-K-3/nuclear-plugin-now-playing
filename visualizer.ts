@@ -27,6 +27,8 @@ export class Visualizer {
   private lastLog = '';
   private opacity = 0;
   private smooth = new Float32Array(BARS);
+  private raw = new Float32Array(BARS);
+  private peak = 0;
   private g: CanvasRenderingContext2D;
   private width = 0;
   private height = 0;
@@ -37,6 +39,11 @@ export class Visualizer {
   private settled = false;
   private lastColor = '';
   private resize: ResizeObserver;
+  private analyze = false; // keep analysing for the beat effects even when the bars are off
+  private slowBass = 0;
+  // Bass level (0–1, smoothed) and beat pulse (0–1, spikes on kicks), 0 without a real signal
+  level = 0;
+  pulse = 0;
 
   constructor(private canvas: HTMLCanvasElement, private accent: () => string) {
     this.g = canvas.getContext('2d')!;
@@ -53,7 +60,17 @@ export class Visualizer {
     this.mode = mode;
     this.settled = false;
     this.canvas.style.display = mode === 'off' ? 'none' : '';
-    if (mode === 'off') this.disconnect();
+    if (!this.capturing()) this.disconnect();
+  }
+
+  // Beat-reactive effects need the analysis even when no bars are drawn
+  setAnalyze(on: boolean) {
+    this.analyze = on;
+    if (!this.capturing()) this.disconnect();
+  }
+
+  private capturing() {
+    return this.mode !== 'off' || this.analyze;
   }
 
   stop() {
@@ -70,9 +87,13 @@ export class Visualizer {
 
   // Call every frame
   draw(playing: boolean) {
-    if (this.mode === 'off') return;
+    if (!this.capturing()) return;
     const now = performance.now();
     this.updateSource(playing, now);
+    const live = this.hasSignal && this.analyser;
+    if (live) this.analyser!.getByteFrequencyData(this.freq);
+    this.updateLevels(!!live && playing);
+    if (this.mode === 'off') return;
 
     const { width: w, height: h, g } = this;
     if (!w || !h) return;
@@ -89,12 +110,13 @@ export class Visualizer {
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     g.clearRect(0, 0, w, h);
     g.globalAlpha = this.opacity;
-    const live = this.hasSignal && this.analyser;
 
     if (this.mode === 'bars') {
-      if (live) this.analyser!.getByteFrequencyData(this.freq);
       const edges = this.barEdges();
       let moving = false;
+      // Automatic gain: bars are scaled against the recent peak, so a loud master does not pin every
+      // bar at the top and a quiet song still moves. The curve keeps sustained energy low and lets hits stand out.
+      let frameMax = 0;
       for (let i = 0; i < BARS; i++) {
         let v = 0;
         if (live) {
@@ -102,8 +124,15 @@ export class Visualizer {
           let sum = 0;
           for (let b = from; b < to && b < this.freq.length; b++) sum += this.freq[b];
           // higher bands carry less energy: compensate a little
-          v = Math.min(1, (sum / (to - from) / 255) * (1 + (i / BARS) * 0.6));
+          const raw = (sum / (to - from) / 255) * (1 + (i / BARS) * 0.3);
+          this.raw[i] = raw;
+          if (raw > frameMax) frameMax = raw;
         }
+      }
+      this.peak = Math.max(frameMax, this.peak * 0.996);
+      for (let i = 0; i < BARS; i++) {
+        let v = 0;
+        if (live) v = Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, 0.2)), 2.2) * 0.92;
         const delta = (v - this.smooth[i]) * (v > this.smooth[i] ? 0.5 : 0.12);
         if (Math.abs(delta) > 0.0005) moving = true;
         this.smooth[i] += delta;
@@ -136,6 +165,24 @@ export class Visualizer {
       this.settled = !playing || this.opacity === 0;
     }
     g.globalAlpha = 1;
+  }
+
+  // Bass energy (≈40–160 Hz) drives `level`; jumps above its running average drive `pulse`
+  private updateLevels(live: boolean) {
+    if (!live) {
+      this.level *= 0.92;
+      this.pulse *= 0.85;
+      return;
+    }
+    const hzPerBin = (this.ctx?.sampleRate || 48000) / 2 / this.freq.length;
+    const from = Math.max(1, Math.round(40 / hzPerBin)), to = Math.max(from + 1, Math.round(160 / hzPerBin));
+    let sum = 0;
+    for (let b = from; b < to; b++) sum += this.freq[b];
+    const bass = sum / (to - from) / 255;
+    this.level += (bass - this.level) * (bass > this.level ? 0.5 : 0.08);
+    this.slowBass += (bass - this.slowBass) * 0.02;
+    const kick = Math.min(1, Math.max(0, (bass - this.slowBass * 1.05) * 4));
+    this.pulse = Math.max(kick, this.pulse * 0.88);
   }
 
   // Keeps the analyser attached to an <audio> element that actually produces sound
@@ -178,6 +225,9 @@ export class Visualizer {
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
       this.analyser.smoothingTimeConstant = 0.75;
+      // Wider range than the default (-100 to -30 dB), which saturates on loud masters
+      this.analyser.minDecibels = -90;
+      this.analyser.maxDecibels = -10;
       this.source = this.ctx.createMediaStreamSource(stream);
       this.source.connect(this.analyser); // analyser only, never the speakers
     } catch (e) {
@@ -220,5 +270,6 @@ export class Visualizer {
   private disconnect() {
     try { this.source?.disconnect(); } catch { /* already disconnected */ }
     this.source = null; this.analyser = null; this.element = null; this.hasSignal = false;
+    this.level = 0; this.pulse = 0;
   }
 }

@@ -5,6 +5,7 @@ const CATEGORY = 'Now Playing';
 
 export type Prefs = {
   blur: number;
+  effects: boolean;
   animatedBg: boolean;
   visualizer: 'off' | 'bars' | 'wave';
   clock: boolean;
@@ -17,6 +18,7 @@ export type Prefs = {
 
 export const DEFAULTS: Prefs = {
   blur: 80,
+  effects: true,
   animatedBg: true,
   visualizer: 'bars',
   clock: false,
@@ -31,6 +33,7 @@ const definitions = () => [
   { id: 'open', title: t('setOpen'), description: t('setOpenDesc'), kind: 'custom', widgetId: 'open', default: null },
   { id: 'blur', title: t('setBlur'), kind: 'number', default: DEFAULTS.blur,
     widget: { type: 'slider', min: 0, max: 150, step: 10, unit: 'px', startLabel: t('setBlurSharp'), endLabel: t('setBlurSoft') } },
+  { id: 'effects', title: t('setEffects'), description: t('setEffectsDesc'), kind: 'boolean', default: DEFAULTS.effects },
   { id: 'animatedBg', title: t('setAnimatedBg'), description: t('setAnimatedBgDesc'), kind: 'boolean', default: DEFAULTS.animatedBg },
   { id: 'visualizer', title: t('setVisualizer'), kind: 'enum', default: DEFAULTS.visualizer, widget: { type: 'select' },
     options: [{ value: 'off', label: t('setVizOff') }, { value: 'bars', label: t('setVizBars') }, { value: 'wave', label: t('setVizWave') }] },

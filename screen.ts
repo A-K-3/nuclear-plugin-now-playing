@@ -1,6 +1,7 @@
 // Now Playing screen: artwork, track info, timeline, controls, favorite, lyrics, SoundCloud
 // comments, visualizer and a queue that can be searched, reordered, resized and collapsed.
 import { SoundCloudComments } from './comments';
+import { Effects } from './effects';
 import { locale, t } from './i18n';
 import { ICON, svg } from './icons';
 import { LyricsPanel } from './lyrics';
@@ -14,9 +15,12 @@ const QUEUE_KEY = 'npx-queue';
 const NEUTRAL_TINT = '40, 40, 48';
 
 const html = () => `
-<div class="bg" data-bg="A"></div><div class="bg" data-bg="B" style="opacity:0"></div>
-<div class="blobs"><i></i><i></i><i></i></div>
+<div class="backdrop">
+  <div class="bg" data-bg="A"></div><div class="bg" data-bg="B" style="opacity:0"></div>
+  <div class="blobs"><i></i><i></i><i></i></div>
+</div>
 <div class="tint"></div>
+<div class="pulse"></div>
 <div class="app">
   <section class="player">
     <canvas class="viz"></canvas>
@@ -29,12 +33,16 @@ const html = () => `
     </div>
     <div class="stage">
       <div class="main">
-        <div class="cover"><div class="empty"></div><img data-img="A" alt=""><img data-img="B" alt="" style="opacity:0"></div>
+        <div class="cover-wrap">
+          <div class="cover-glow"></div>
+          <div class="cover"><div class="empty"></div><img data-img="A" alt=""><img data-img="B" alt="" style="opacity:0"><div class="shine"><i></i></div></div>
+        </div>
         <div class="info"><div class="title">—</div><div class="artist"></div><div class="album"></div></div>
         <div class="timeline">
           <div class="slider seek"><div class="sc-markers"></div><div class="fill"></div><div class="knob"></div></div>
           <div class="times"><span class="cur">0:00</span><span class="sc-status"></span><span class="dur">0:00</span></div>
         </div>
+        <div class="dock">
         <div class="controls">
           <button data-act="fav" class="fav" title="${t('favTitle')}">${svg(ICON.heartOutline, 'class="favicon"')}</button>
           <button data-act="shuffle" class="mode off" title="${t('shuffleTitle')}">${svg(ICON.shuffle)}</button>
@@ -47,6 +55,7 @@ const html = () => `
         <div class="volume">
           <button data-act="mute" title="${t('muteTitle')}">${svg(ICON.volHi, 'class="volicon"')}</button>
           <div class="slider vol"><div class="fill"></div><div class="knob"></div></div>
+        </div>
         </div>
       </div>
       <div class="lyrics"></div>
@@ -126,6 +135,10 @@ export function createScreen(api: any) {
   const lyrics = new LyricsPanel(api, q('.lyrics'), (s) => api.Playback.seekTo(s));
   const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'), (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
   const viz = new Visualizer(q<HTMLCanvasElement>('.viz'), () => accentColor);
+  const effects = new Effects(root, {
+    wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine'),
+    pulse: q('.pulse'), backdrop: q('.backdrop'), info: q('.info'),
+  }, () => viz);
 
   function toast(text: string) {
     el.toast.textContent = text;
@@ -157,6 +170,7 @@ export function createScreen(api: any) {
       img.style.opacity = '1'; bg.style.opacity = '1';
       q(`[data-img="${front}"]`).style.opacity = '0'; q(`[data-bg="${front}"]`).style.opacity = '0';
       front = back;
+      effects.flip();
     };
     img.src = url;
     coverColors(url).then((colors) => {
@@ -400,6 +414,7 @@ export function createScreen(api: any) {
     if (showLyrics) lyrics.update(pos);
     comments.update(pos, playing);
     viz.draw(playing);
+    effects.update(performance.now());
     renderUpNext(pos);
     raf = requestAnimationFrame(tick);
   }
@@ -460,9 +475,18 @@ export function createScreen(api: any) {
     if (on) lyrics.load(currentItem()?.track);
   };
 
+  // HTML fullscreen inside Nuclear's window (Tauri/WebView2) can leave the page at the old window size,
+  // with a black strip where the taskbar was. When that happens, leave fullscreen and explain why.
   const fullscreen = () => {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else root.requestFullscreen?.().catch(() => {});
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+    root.requestFullscreen?.().then(() => {
+      setTimeout(() => {
+        if (document.fullscreenElement && window.innerHeight < screen.height - 4) {
+          document.exitFullscreen().catch(() => {});
+          toast(t('fullscreenBroken'));
+        }
+      }, 600);
+    }).catch(() => {});
   };
 
   const toggleFav = async () => {
@@ -555,6 +579,7 @@ export function createScreen(api: any) {
     root.classList.toggle('show-clock', p.clock);
     root.classList.toggle('pin-back', p.backAlwaysVisible);
     viz.setMode(p.visualizer);
+    viz.setAnalyze(effects.setEnabled(p.effects));
     setOn(el.ctoggle, p.comments);
     comments.setEnabled(p.comments);
     if (open && p.comments && !prev?.comments) comments.load(currentItem()?.track);
@@ -626,6 +651,7 @@ export function createScreen(api: any) {
     destroy() {
       hide();
       viz.destroy();
+      effects.destroy();
       observer.disconnect();
       window.removeEventListener('keydown', onKey, true);
       document.getElementById(BTN_ID)?.remove();
