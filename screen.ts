@@ -146,7 +146,12 @@ export function createScreen(api: any) {
   };
 
   const lyrics = new LyricsPanel(api, q('.lyrics'), (s) => api.Playback.seekTo(s));
-  const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'), (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
+  const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'),
+    {
+      never: ['.timeline', '.dock', '.back', '.clock', '.corner', '.upnext', '.settings-panel'].map((s) => q(s)),
+      ifRoom: ['.cover-wrap', '.info'].map((s) => q(s)),
+    },
+    (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
   const viz = new Visualizer(q<HTMLCanvasElement>('.viz'), () => accentColor);
   const effects = new Effects({
     wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine i'),
@@ -411,7 +416,7 @@ export function createScreen(api: any) {
   function renderUpNext(pos: number) {
     const next = queue.items?.[queue.currentIndex + 1];
     const remaining = (state.duration || 0) - pos;
-    const show = !!(prefs?.upNext && next && state.status === 'playing' && state.duration > 25
+    const show = !!(next && state.status === 'playing' && state.duration > 25
       && remaining <= 10 && remaining > 0.3 && repeat !== 'one' && !shuffle);
     if (show && el.upnext.dataset.id !== next.id) {
       const info = infoFor(next);
@@ -637,7 +642,6 @@ export function createScreen(api: any) {
     root.style.setProperty('--blur', `${p.blur}px`);
     root.classList.toggle('animated', p.animatedBg);
     root.classList.toggle('show-clock', p.clock);
-    root.classList.toggle('pin-back', p.backAlwaysVisible);
     viz.setMode(p.visualizer);
     applyMotion();
     setOn(el.ctoggle, p.comments);
@@ -657,7 +661,7 @@ export function createScreen(api: any) {
       queue = qu;
       renderPlayback(playback);
     } catch { /* Nuclear not ready */ }
-    setLyrics(!!prefs?.lyrics);
+    setLyrics(false);
     // Window buttons only when Nuclear draws its own title bar (the one the screen covers)
     Promise.resolve(api.Settings.getGlobal?.('core.appearance.customTitleBar'))
       .then((custom) => root.classList.toggle('custom-titlebar', !!custom && appWindow.available))

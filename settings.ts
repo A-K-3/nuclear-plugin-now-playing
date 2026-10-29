@@ -9,11 +9,7 @@ export type Prefs = {
   animatedBg: boolean;
   visualizer: 'off' | 'bars' | 'wave';
   clock: boolean;
-  backAlwaysVisible: boolean;
-  upNext: boolean;
-  skipFailed: boolean;
   comments: boolean;
-  lyrics: boolean;
 };
 
 export const DEFAULTS: Prefs = {
@@ -22,11 +18,7 @@ export const DEFAULTS: Prefs = {
   animatedBg: true,
   visualizer: 'bars',
   clock: false,
-  backAlwaysVisible: false,
-  upNext: true,
-  skipFailed: true,
   comments: true,
-  lyrics: false,
 };
 
 const definitions = () => [
@@ -38,11 +30,7 @@ const definitions = () => [
   { id: 'visualizer', title: t('setVisualizer'), kind: 'enum', default: DEFAULTS.visualizer, widget: { type: 'select' },
     options: [{ value: 'off', label: t('setVizOff') }, { value: 'bars', label: t('setVizBars') }, { value: 'wave', label: t('setVizWave') }] },
   { id: 'clock', title: t('setClock'), kind: 'boolean', default: DEFAULTS.clock },
-  { id: 'backAlwaysVisible', title: t('setBackVisible'), description: t('setBackVisibleDesc'), kind: 'boolean', default: DEFAULTS.backAlwaysVisible },
-  { id: 'upNext', title: t('setUpNext'), description: t('setUpNextDesc'), kind: 'boolean', default: DEFAULTS.upNext },
-  { id: 'skipFailed', title: t('setSkipFailed'), description: t('setSkipFailedDesc'), kind: 'boolean', default: DEFAULTS.skipFailed },
   { id: 'comments', title: t('setComments'), description: t('setCommentsDesc'), kind: 'boolean', default: DEFAULTS.comments },
-  { id: 'lyrics', title: t('setLyrics'), description: t('setLyricsDesc'), kind: 'boolean', default: DEFAULTS.lyrics },
 ];
 
 export async function registerSettings(api: any) {

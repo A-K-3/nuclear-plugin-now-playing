@@ -11,12 +11,11 @@ import { setupDoubleClickPlay } from './doubleclick';
 import { initLanguage, t } from './i18n';
 import { setupMediaSession } from './mediasession';
 import { createScreen, type Screen } from './screen';
-import { DEFAULTS, type Prefs, registerSettings, watchSettings } from './settings';
+import { registerSettings, watchSettings } from './settings';
 import { BUTTON_STYLE } from './util';
 
 let api: any = null;
 let screen: Screen | null = null;
-let prefs: Prefs = { ...DEFAULTS };
 // Everything onEnable sets up is torn down from here, in reverse order
 const cleanups: Array<() => void> = [];
 
@@ -47,10 +46,10 @@ export default {
     screen = created;
     cleanups.push(() => { created.destroy(); screen = null; });
 
-    cleanups.push(await watchSettings(pluginApi, (p) => { prefs = p; screen?.setPrefs(p); }));
+    cleanups.push(await watchSettings(pluginApi, (p) => screen?.setPrefs(p)));
     cleanups.push(setupDoubleClickPlay());
     cleanups.push(setupMediaSession(pluginApi));
-    cleanups.push(setupAutoSkip(pluginApi, () => prefs.skipFailed, (text) => { if (screen?.isOpen()) screen.toast(text); }));
+    cleanups.push(setupAutoSkip(pluginApi, (text) => { if (screen?.isOpen()) screen.toast(text); }));
   },
 
   async onDisable() {
