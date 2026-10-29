@@ -149,12 +149,14 @@ ${R} .lyr-src { font-size:12px; color:var(--dim); padding:2vh 0 4vh; }
 ${R} .sc-layer { position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
 ${R} .sc-bubble { position:absolute; display:flex; gap:10px; align-items:flex-start; max-width:min(380px,40%); padding:9px 14px 9px 9px;
   border-radius:18px; background:rgba(0,0,0,.45); backdrop-filter:blur(10px); box-shadow:0 8px 30px rgba(0,0,0,.35);
-  animation:npx-bubble 7s ease forwards; }
+  animation:npx-bubble-in .8s cubic-bezier(.22,1,.36,1) backwards;
+  transition:opacity .9s ease, transform .9s cubic-bezier(.4,0,.6,1), filter .9s ease; }
+${R} .sc-bubble.out { opacity:0; transform:translateY(-10px) scale(.98); filter:blur(2px); }
 ${R} .sc-bubble img { width:30px; height:30px; border-radius:50%; flex:none; object-fit:cover; }
 ${R} .sc-bubble b { display:block; font-size:12px; color:var(--accent); margin-bottom:2px; }
 ${R} .sc-bubble span { display:block; font-size:14.5px; line-height:1.3; word-break:break-word; }
-@keyframes npx-bubble { 0% { opacity:0; transform:translateY(14px) scale(.96) } 8% { opacity:1; transform:none }
-  80% { opacity:1 } 100% { opacity:0; transform:translateY(-40px) } }
+@keyframes npx-bubble-in { from { opacity:0; transform:translateY(8px) scale(.98); filter:blur(2px) } to { opacity:1; transform:none; filter:none } }
+@media (prefers-reduced-motion: reduce) { ${R} .sc-bubble, ${R} .sc-bubble.out { transform:none; filter:none } }
 
 /* Top bar: back, clock, buttons */
 ${R} .back { position:absolute; top:16px; left:16px; display:flex; align-items:center; gap:8px; padding:8px 14px 8px 10px; z-index:3;

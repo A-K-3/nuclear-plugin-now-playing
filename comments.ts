@@ -7,6 +7,16 @@ import { esc, httpJson, httpText, norm, storage } from './util';
 const API = 'https://api-v2.soundcloud.com';
 const MAX_BUBBLES = 4;
 const BUBBLE_MS = 7000;
+// Exit fade length; must match the .sc-bubble.out transition in styles.ts
+const FADE_MS = 900;
+// Busy songs: at most one new bubble this often, the rest wait their turn
+const SPAWN_GAP_MS = 900;
+// A waiting comment is dropped once it is this far behind the music
+const MAX_LATE_MS = 5000;
+const MAX_WAITING = 6;
+// Free space kept around each bubble, in pixels
+const SPACING = 12;
+const PLACEMENT_TRIES = 24;
 
 type Comment = { ts: number; body: string; user: string; avatar: string };
 
@@ -18,6 +28,9 @@ export class SoundCloudComments {
   private durationMs = 0;
   private enabled = true;
   private clientId = storage.get('npx-sc', { clientId: '' }).clientId;
+  private waiting: Comment[] = [];
+  private lastSpawn = 0;
+  private timers = new Set<number>();
 
   constructor(private api: any, private layer: HTMLElement, private markers: HTMLElement, private onStatus: (text: string) => void) {}
 
@@ -29,9 +42,17 @@ export class SoundCloudComments {
     this.onStatus(this.statusText());
   }
 
-  // Removes the bubbles currently on screen
+  // Removes the bubbles currently on screen and the ones waiting to appear
   clear() {
+    this.timers.forEach(clearTimeout);
+    this.timers.clear();
+    this.waiting = [];
     this.layer.innerHTML = '';
+  }
+
+  private later(fn: () => void, ms: number) {
+    const id = window.setTimeout(() => { this.timers.delete(id); fn(); }, ms);
+    this.timers.add(id);
   }
 
   private statusText() {
@@ -66,25 +87,55 @@ export class SoundCloudComments {
       // Seek: reposition the pointer without releasing every comment in between
       this.ptr = this.comments.findIndex((c) => c.ts >= ms);
       if (this.ptr < 0) this.ptr = this.comments.length;
+      this.waiting = [];
     }
     this.lastMs = ms;
     if (!playing) return;
     while (this.ptr < this.comments.length && this.comments[this.ptr].ts <= ms) {
       const c = this.comments[this.ptr++];
-      if (ms - c.ts < 1500) this.spawn(c);
+      if (ms - c.ts < 1500) this.waiting.push(c);
     }
+    // Keep only the newest few and forget the ones the music has left behind
+    this.waiting = this.waiting.filter((c) => ms - c.ts < MAX_LATE_MS).slice(-MAX_WAITING);
+    const now = performance.now();
+    if (!this.waiting.length || now - this.lastSpawn < SPAWN_GAP_MS) return;
+    if (this.layer.querySelectorAll('.sc-bubble:not(.out)').length >= MAX_BUBBLES) return;
+    if (this.spawn(this.waiting[0])) { this.waiting.shift(); this.lastSpawn = now; }
   }
 
+  // Shows a bubble in a free spot; returns false (and shows nothing) when there is no room yet
   private spawn(c: Comment) {
-    const bubbles = this.layer.querySelectorAll('.sc-bubble');
-    if (bubbles.length >= MAX_BUBBLES) bubbles[0].remove();
     const el = document.createElement('div');
     el.className = 'sc-bubble';
-    el.style.top = `${8 + Math.random() * 55}%`;
-    el.style.left = `${4 + Math.random() * 52}%`;
+    el.style.visibility = 'hidden';
     el.innerHTML = `${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : ''}<div><b>${esc(c.user)}</b><span>${esc(c.body)}</span></div>`;
     this.layer.appendChild(el);
-    setTimeout(() => el.remove(), BUBBLE_MS);
+    const spot = this.findSpot(el.offsetWidth, el.offsetHeight, el);
+    if (!spot) { el.remove(); return false; }
+    el.style.left = `${spot.x}px`;
+    el.style.top = `${spot.y}px`;
+    el.style.visibility = '';
+    this.later(() => {
+      el.classList.add('out');
+      this.later(() => el.remove(), FADE_MS);
+    }, BUBBLE_MS - FADE_MS);
+    return true;
+  }
+
+  // Random position in the same area as before (upper-left two thirds) that touches no other bubble
+  private findSpot(w: number, h: number, self: HTMLElement) {
+    const W = this.layer.clientWidth, H = this.layer.clientHeight;
+    const taken = Array.from(this.layer.querySelectorAll<HTMLElement>('.sc-bubble'))
+      .filter((b) => b !== self)
+      .map((b) => ({ x: b.offsetLeft, y: b.offsetTop, w: b.offsetWidth, h: b.offsetHeight }));
+    const maxX = Math.max(0, Math.min(W * 0.56, W - w - 16)), minX = W * 0.04;
+    const maxY = Math.max(0, Math.min(H * 0.63, H - h - 16)), minY = H * 0.08;
+    for (let i = 0; i < PLACEMENT_TRIES; i++) {
+      const x = minX + Math.random() * Math.max(0, maxX - minX), y = minY + Math.random() * Math.max(0, maxY - minY);
+      const clear = taken.every((r) => x + w + SPACING <= r.x || r.x + r.w + SPACING <= x || y + h + SPACING <= r.y || r.y + r.h + SPACING <= y);
+      if (clear) return { x, y };
+    }
+    return null;
   }
 
   private drawMarkers() {
