@@ -27,6 +27,7 @@ Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, des
 - **Favorites.** Like the current song without leaving the screen.
 - **Double-click to play.** Double-click any track row in Nuclear (playlists, albums, search, favorites) to play it.
 - **Auto-skip.** Songs that fail to load are skipped automatically.
+- **Media keys.** Play, pause, next and previous from the keyboard or headphones go through Nuclear, so every view stays in sync. Track info and artwork show up in the OS media overlay.
 - **Spotify import.** Turn Spotify playlists, albums or a list of track links into a Nuclear playlist, with no account or API key.
 - **English and Spanish.** The plugin follows Nuclear's language setting.
 
@@ -102,6 +103,8 @@ visualizer.ts   audio visualizer and beat detection
 effects.ts      3D tilt, glow, pulse and flip effects
 importer.ts     Spotify importer (playlist provider + settings widget)
 autoskip.ts     skip songs that fail to load
+mediasession.ts media keys and OS media overlay
+appwindow.ts    window drag and controls over the custom title bar
 doubleclick.ts  double-click to play
 settings.ts     settings definitions
 i18n.ts         English and Spanish strings

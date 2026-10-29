@@ -3,6 +3,7 @@
 //   SoundCloud comments, visualizer, favorite and a searchable, reorderable, resizable queue.
 // - Double-click any track row to play it.
 // - Automatic skip of songs that fail to load.
+// - Media keys (keyboard, headphones) routed through Nuclear, with track info for the OS overlay.
 // - Spotify importer (Nuclear's import playlist screen and Settings).
 import React from 'react';
 
@@ -10,6 +11,7 @@ import { setupAutoSkip } from './autoskip';
 import { setupDoubleClickPlay } from './doubleclick';
 import { initLanguage, t } from './i18n';
 import { createImporterWidget, createSpotifyProvider } from './importer';
+import { setupMediaSession } from './mediasession';
 import { createScreen, type Screen } from './screen';
 import { DEFAULTS, type Prefs, registerSettings, watchSettings } from './settings';
 import { BUTTON_STYLE } from './util';
@@ -53,6 +55,7 @@ export default {
 
     cleanups.push(await watchSettings(pluginApi, (p) => { prefs = p; screen?.setPrefs(p); }));
     cleanups.push(setupDoubleClickPlay());
+    cleanups.push(setupMediaSession(pluginApi));
     cleanups.push(setupAutoSkip(pluginApi, () => prefs.skipFailed, (text) => { if (screen?.isOpen()) screen.toast(text); }));
     try {
       const providerId = pluginApi.Providers.register(createSpotifyProvider(pluginApi));
