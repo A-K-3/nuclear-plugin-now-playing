@@ -132,6 +132,7 @@ export function createScreen(api: any) {
   const infoCache = new Map<string, ItemInfo>();
   const unsubs: Array<() => void> = [];
   let raf = 0, poll = 0, idleTimer = 0, clockTimer = 0, toastTimer = 0, idle = false;
+  let pointerInside = false; // the cursor is over the screen (not on another monitor or window)
 
   const currentItem = () => queue.items?.[queue.currentIndex];
   const position = () => {
@@ -422,7 +423,8 @@ export function createScreen(api: any) {
     if (showLyrics) lyrics.update(pos);
     comments.update(pos, playing);
     viz.draw(playing); // updates the beat levels that effects.update reads
-    effects.update(performance.now(), idle);
+    // Float only while the cursor rests over the screen; with the cursor elsewhere the artwork stays straight
+    effects.update(performance.now(), idle && pointerInside);
     renderUpNext(pos);
     raf = requestAnimationFrame(tick);
   }
@@ -596,8 +598,14 @@ export function createScreen(api: any) {
   };
   root.addEventListener('mousemove', (e) => {
     // The screen is fixed to the viewport, so the viewport size maps the cursor to -1…1
+    pointerInside = true;
     effects.point((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1);
     wake();
+  });
+  // Cursor gone to another monitor or window: ease the artwork back to straight
+  root.addEventListener('mouseleave', () => {
+    pointerInside = false;
+    effects.point(0, 0);
   });
 
   const tickClock = () => { el.clock.textContent = new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };

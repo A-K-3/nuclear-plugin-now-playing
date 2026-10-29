@@ -36,7 +36,10 @@ export function setupMediaSession(api: any) {
       artwork: cover ? [{ src: cover }] : [],
     });
   };
-  const unsubQueue = api.Queue.subscribeToCurrentItem(showTrack);
+  // subscribeToCurrentItem is the precise hook; fall back to the whole queue on hosts without it
+  const unsubQueue = api.Queue.subscribeToCurrentItem
+    ? api.Queue.subscribeToCurrentItem(showTrack)
+    : api.Queue.subscribe((queue: any) => showTrack(queue.items?.[queue.currentIndex]));
   api.Queue.getCurrentItem().then(showTrack).catch(() => {});
 
   let lastState = '';
