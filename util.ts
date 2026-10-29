@@ -106,8 +106,6 @@ export const BUTTON_STYLE = {
   padding: '6px 14px', borderRadius: 8, border: '1px solid currentColor', background: 'transparent', color: 'inherit', cursor: 'pointer',
 };
 
-// User-Agent: Spotify only includes the og:* metadata in the HTML for a simple agent.
-export const UA_SIMPLE = 'Mozilla/5.0';
 const UA_BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36';
 
 export async function httpText(api: any, url: string, timeoutMs = 12000, userAgent = UA_BROWSER): Promise<string> {
@@ -119,20 +117,6 @@ export async function httpText(api: any, url: string, timeoutMs = 12000, userAge
 }
 
 export const httpJson = async (api: any, url: string, timeoutMs?: number) => JSON.parse(await httpText(api, url, timeoutMs));
-
-// Runs tasks at most N at a time, keeping results in order
-export async function pool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i], i);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
-}
 
 export const storage = {
   get<T>(key: string, fallback: T): T {

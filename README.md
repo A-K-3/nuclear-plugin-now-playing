@@ -28,7 +28,6 @@ Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, des
 - **Double-click to play.** Double-click any track row in Nuclear (playlists, albums, search, favorites) to play it.
 - **Auto-skip.** Songs that fail to load are skipped automatically.
 - **Media keys.** Play, pause, next and previous from the keyboard or headphones go through Nuclear, so every view stays in sync. Track info and artwork show up in the OS media overlay.
-- **Spotify import.** Turn Spotify playlists, albums or a list of track links into a Nuclear playlist, with no account or API key.
 - **English and Spanish.** The plugin follows Nuclear's language setting.
 
 <p align="center">
@@ -66,7 +65,7 @@ Open the screen with the button next to the volume control, press <kbd>F9</kbd>,
 
 ## Settings
 
-Available under **Settings → Now Playing**:
+Change them from the gear button on the screen, or under **Settings → Now Playing**:
 
 | Setting | Default |
 |---|---|
@@ -81,51 +80,12 @@ Available under **Settings → Now Playing**:
 | SoundCloud comments | On |
 | Open with lyrics | Off |
 
-The Spotify importer is in the same section. You can also paste a Spotify link into Nuclear's **Import playlist** screen.
 
 ## Notes and limitations
 
 - **No official UI hooks.** Nuclear's plugin API has no way to add UI elements, so the player-bar button and double-click-to-play attach to Nuclear's interface directly. A future Nuclear update could break them. <kbd>F9</kbd> and the settings entry keep working either way.
 - **Visualizer signal.** The visualizer reads the playing `<audio>` element through `captureStream()`. When a stream cannot be captured, the bars fade out and a diagnostic message is written to the developer console.
-- **Spotify import scope.** Spotify's public embed exposes at most 100 tracks per playlist. Imported tracks carry metadata only (title, artists, duration and artwork); Nuclear resolves the audio through your configured streaming provider.
 - **Lyrics provider required.** Lyrics need at least one lyrics plugin installed in Nuclear.
-
-## Development
-
-The plugin is plain TypeScript with no build step. Nuclear bundles it with esbuild when it loads.
-
-```
-index.ts        plugin lifecycle (onLoad / onEnable / onDisable)
-screen.ts       Now Playing screen and queue panel
-lyrics.ts       synced lyrics panel
-comments.ts     SoundCloud timed comments
-visualizer.ts   audio visualizer and beat detection
-effects.ts      3D tilt, glow, pulse and flip effects
-importer.ts     Spotify importer (playlist provider + settings widget)
-autoskip.ts     skip songs that fail to load
-mediasession.ts media keys and OS media overlay
-appwindow.ts    window drag and controls over the custom title bar
-doubleclick.ts  double-click to play
-settings.ts     settings definitions
-i18n.ts         English and Spanish strings
-styles.ts       screen styles
-```
-
-Check that it compiles the same way Nuclear does:
-
-```sh
-npx esbuild index.ts --bundle --format=cjs --platform=browser --external:react --outfile=/tmp/check.js
-```
-
-### Releasing
-
-Bump `version` in `package.json`, then push a matching tag:
-
-```sh
-git tag v1.0.1 && git push origin v1.0.1
-```
-
-The release workflow verifies the build and publishes a GitHub release with `plugin.zip`.
 
 ## License
 

@@ -6,6 +6,7 @@ import { Effects } from './effects';
 import { locale, t } from './i18n';
 import { ICON, svg } from './icons';
 import { LyricsPanel } from './lyrics';
+import { createQuickSettings } from './quicksettings';
 import type { Prefs } from './settings';
 import { BTN_ID, CSS, ROOT_ID } from './styles';
 import { accentFrom, art, clamp, display, esc, fallbackCover, fmt, fmtLong, loadImage, norm, storage } from './util';
@@ -29,6 +30,7 @@ const html = () => `
     <button data-act="close" class="back" title="${t('backTitle')}">${svg(ICON.back)}<span>${t('back')}</span></button>
     <div class="clock"></div>
     <div class="corner">
+      <button data-act="settings" class="stoggle" title="${t('settings')}">${svg(ICON.gear)}</button>
       <button data-act="comments" class="ctoggle" title="${t('commentsTitle')}">${svg(ICON.comment)}</button>
       <button data-act="queue" class="qtoggle" title="${t('queueToggleTitle')}">${svg(ICON.list)}</button>
       <button data-act="full" title="${t(appWindow.available ? 'maximizeTitle' : 'fullscreenTitle')}">${svg(ICON.full)}</button>
@@ -38,6 +40,7 @@ const html = () => `
         <button data-act="winClose" class="winclose" title="${t('winClose')}">${svg(ICON.close)}</button>
       </span>
     </div>
+    <div class="settings-panel" role="dialog"></div>
     <div class="stage">
       <div class="main">
         <div class="cover-wrap">
@@ -530,7 +533,11 @@ export function createScreen(api: any) {
     goto: scrollToCurrent,
     full: fullscreen,
     close: () => hide(),
-    escape: () => { if (!document.fullscreenElement) hide(); },
+    escape: () => {
+      if (root.classList.contains('show-settings')) setSettingsOpen(false);
+      else if (!document.fullscreenElement) hide();
+    },
+    settings: () => setSettingsOpen(!root.classList.contains('show-settings')),
     winMin: appWindow.minimize,
     winMax: appWindow.toggleMaximize,
     winClose: appWindow.close,
@@ -543,6 +550,10 @@ export function createScreen(api: any) {
 
   root.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+    // A click outside the open settings panel (and its gear) closes it
+    if (root.classList.contains('show-settings') && !target.closest('.settings-panel, [data-act="settings"]')) {
+      setSettingsOpen(false);
+    }
     const btn = target.closest('[data-act]') as HTMLElement | null;
     if (btn) {
       // Mouse clicks should not leave a focus ring that later shows up when using the keyboard
@@ -567,7 +578,9 @@ export function createScreen(api: any) {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') {
       e.stopPropagation();
       if (e.key === 'Escape') {
-        if (el.save.classList.contains('show')) setSave(false); else setSearch(false);
+        if ((e.target as HTMLElement).closest('.settings-panel')) setSettingsOpen(false);
+        else if (el.save.classList.contains('show')) setSave(false);
+        else setSearch(false);
         (e.target as HTMLElement).blur();
       }
       return;
@@ -610,9 +623,17 @@ export function createScreen(api: any) {
   }
   reducedMotion?.addEventListener('change', applyMotion);
 
+  // Quick settings (gear button)
+  const quickSettings = createQuickSettings(q('.settings-panel'), api, (px) => root.style.setProperty('--blur', `${px}px`));
+  const setSettingsOpen = (on: boolean) => {
+    root.classList.toggle('show-settings', on);
+    setOn(q('.stoggle'), on);
+  };
+
   function applyPrefs(p: Prefs) {
     const prev = prefs;
     prefs = p;
+    quickSettings.update(p);
     root.style.setProperty('--blur', `${p.blur}px`);
     root.classList.toggle('animated', p.animatedBg);
     root.classList.toggle('show-clock', p.clock);
@@ -655,6 +676,7 @@ export function createScreen(api: any) {
     if (!open) return;
     open = false;
     root.classList.remove('open');
+    setSettingsOpen(false);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     unsubs.splice(0).forEach((u) => u());
     clearInterval(poll); clearInterval(clockTimer); cancelAnimationFrame(raf); clearTimeout(idleTimer);

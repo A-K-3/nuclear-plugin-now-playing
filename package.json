@@ -8,6 +8,6 @@
   "repository": "github:A-K-3/nuclear-plugin-now-playing",
   "nuclear": {
     "displayName": "Now Playing",
-    "categories": ["other", "playlists"]
+    "categories": ["other"]
   }
 }

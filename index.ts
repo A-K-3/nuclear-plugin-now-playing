@@ -4,13 +4,11 @@
 // - Double-click any track row to play it.
 // - Automatic skip of songs that fail to load.
 // - Media keys (keyboard, headphones) routed through Nuclear, with track info for the OS overlay.
-// - Spotify importer (Nuclear's import playlist screen and Settings).
 import React from 'react';
 
 import { setupAutoSkip } from './autoskip';
 import { setupDoubleClickPlay } from './doubleclick';
 import { initLanguage, t } from './i18n';
-import { createImporterWidget, createSpotifyProvider } from './importer';
 import { setupMediaSession } from './mediasession';
 import { createScreen, type Screen } from './screen';
 import { DEFAULTS, type Prefs, registerSettings, watchSettings } from './settings';
@@ -25,11 +23,8 @@ const cleanups: Array<() => void> = [];
 const OpenWidget = () =>
   React.createElement('button', { onClick: () => screen?.show(), style: BUTTON_STYLE }, t('setOpenButton'));
 
-const ImporterWidget = createImporterWidget(() => api);
-
 function registerWidgets(pluginApi: any) {
   pluginApi.Settings.registerWidget('open', OpenWidget);
-  pluginApi.Settings.registerWidget('importer', ImporterWidget);
 }
 
 export default {
@@ -46,7 +41,6 @@ export default {
     registerWidgets(pluginApi);
     cleanups.push(() => {
       pluginApi.Settings.unregisterWidget('open');
-      pluginApi.Settings.unregisterWidget('importer');
     });
 
     const created = createScreen(pluginApi);
@@ -57,12 +51,6 @@ export default {
     cleanups.push(setupDoubleClickPlay());
     cleanups.push(setupMediaSession(pluginApi));
     cleanups.push(setupAutoSkip(pluginApi, () => prefs.skipFailed, (text) => { if (screen?.isOpen()) screen.toast(text); }));
-    try {
-      const providerId = pluginApi.Providers.register(createSpotifyProvider(pluginApi));
-      cleanups.push(() => pluginApi.Providers.unregister(providerId));
-    } catch (e) {
-      console.warn('[Now Playing] could not register the Spotify importer:', e);
-    }
   },
 
   async onDisable() {

@@ -43,7 +43,6 @@ const definitions = () => [
   { id: 'skipFailed', title: t('setSkipFailed'), description: t('setSkipFailedDesc'), kind: 'boolean', default: DEFAULTS.skipFailed },
   { id: 'comments', title: t('setComments'), description: t('setCommentsDesc'), kind: 'boolean', default: DEFAULTS.comments },
   { id: 'lyrics', title: t('setLyrics'), description: t('setLyricsDesc'), kind: 'boolean', default: DEFAULTS.lyrics },
-  { id: 'importer', title: t('setImporter'), description: t('setImporterDesc'), kind: 'custom', widgetId: 'importer', default: null },
 ];
 
 export async function registerSettings(api: any) {
