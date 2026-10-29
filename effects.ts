@@ -8,8 +8,8 @@
 // and a style is only written when its value actually changes.
 
 const PERSPECTIVE = 1200; // px, keep in sync with .cover-wrap in styles.ts
-const TILT_X = 9; // degrees for full vertical travel
-const TILT_Y = 12; // degrees for full horizontal travel
+const TILT_X = 6; // degrees for full vertical travel
+const TILT_Y = 8; // degrees for full horizontal travel
 const EASE = 0.06; // fraction of the remaining distance covered per frame
 const IDLE_DRIFT = { x: 0.35, y: 0.25, speedX: 0.35, speedY: 0.27 };
 const SHINE_SHIFT = 22; // % the shine travels opposite to the tilt

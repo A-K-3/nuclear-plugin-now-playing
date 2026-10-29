@@ -5,7 +5,6 @@ const en = {
   // Screen
   back: 'Back',
   backTitle: 'Back to Nuclear (Esc)',
-  commentsTitle: 'SoundCloud comments (C)',
   queueToggleTitle: 'Show or hide the queue (Q)',
   settings: 'Settings',
   fullscreenTitle: 'Fullscreen (F)',
@@ -80,7 +79,6 @@ type Key = keyof typeof en;
 const es: Record<Key, string> = {
   back: 'Volver',
   backTitle: 'Volver a Nuclear (Esc)',
-  commentsTitle: 'Comentarios de SoundCloud (C)',
   queueToggleTitle: 'Mostrar u ocultar la cola (Q)',
   settings: 'Ajustes',
   fullscreenTitle: 'Pantalla completa (F)',

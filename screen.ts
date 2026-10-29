@@ -31,7 +31,6 @@ const html = () => `
     <div class="clock"></div>
     <div class="corner">
       <button data-act="settings" class="stoggle" title="${t('settings')}">${svg(ICON.gear)}</button>
-      <button data-act="comments" class="ctoggle" title="${t('commentsTitle')}">${svg(ICON.comment)}</button>
       <button data-act="queue" class="qtoggle" title="${t('queueToggleTitle')}">${svg(ICON.list)}</button>
       <button data-act="full" title="${t(appWindow.available ? 'maximizeTitle' : 'fullscreenTitle')}">${svg(ICON.full)}</button>
       <span class="winctl">
@@ -114,7 +113,7 @@ export function createScreen(api: any) {
     vol: q('.vol'), volFill: q('.vol .fill'), volKnob: q('.vol .knob'), volIcon: q('.volicon path'),
     playIcon: q('.playicon path'), fav: q('.fav'), favIcon: q('.favicon path'),
     shuffle: q('[data-act="shuffle"]'), repeat: q('[data-act="repeat"]'), one: q('.one'), lyricsBtn: q('[data-act="lyrics"]'),
-    qtoggle: q('.qtoggle'), ctoggle: q('.ctoggle'),
+    qtoggle: q('.qtoggle'),
     upnext: q('.upnext'), upImg: q<HTMLImageElement>('.upnext img'), upTitle: q('.upnext b'), upArtist: q('.upnext span'),
     title: q('.title'), artist: q('.artist'), album: q('.album'), clock: q('.clock'), toast: q('.toast'),
     search: q('.qsearch'), searchInput: q<HTMLInputElement>('.qsearch input'), searchBtn: q('[data-act="search"]'),
@@ -644,7 +643,6 @@ export function createScreen(api: any) {
     root.classList.toggle('show-clock', p.clock);
     viz.setMode(p.visualizer);
     applyMotion();
-    setOn(el.ctoggle, p.comments);
     comments.setEnabled(p.comments);
     if (open && p.comments && !prev?.comments) comments.load(currentItem()?.track);
   }
