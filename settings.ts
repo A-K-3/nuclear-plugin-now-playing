@@ -16,7 +16,7 @@ export const DEFAULTS: Prefs = {
   blur: 80,
   effects: true,
   animatedBg: true,
-  visualizer: 'bars',
+  visualizer: 'wave',
   clock: false,
   comments: true,
 };

@@ -72,7 +72,7 @@ Change them from the gear button on the screen, or under **Settings → Now Play
 | Background blur | 80 px |
 | Motion effects | On (off when the OS reduces motion) |
 | Animated background | On |
-| Visualizer (off, bars or wave) | Bars |
+| Visualizer (off, bars or wave) | Wave |
 | Show clock | Off |
 | SoundCloud comments | On |
 
