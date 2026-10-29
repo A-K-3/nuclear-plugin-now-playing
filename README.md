@@ -74,11 +74,7 @@ Change them from the gear button on the screen, or under **Settings → Now Play
 | Animated background | On |
 | Visualizer (off, bars or wave) | Bars |
 | Show clock | Off |
-| Always show “Back” | Off |
-| “Up next” card | On |
-| Skip songs that fail to load | On |
 | SoundCloud comments | On |
-| Open with lyrics | Off |
 
 
 ## Notes and limitations

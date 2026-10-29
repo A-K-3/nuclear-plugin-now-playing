@@ -411,7 +411,7 @@ export function createScreen(api: any) {
   function renderUpNext(pos: number) {
     const next = queue.items?.[queue.currentIndex + 1];
     const remaining = (state.duration || 0) - pos;
-    const show = !!(prefs?.upNext && next && state.status === 'playing' && state.duration > 25
+    const show = !!(next && state.status === 'playing' && state.duration > 25
       && remaining <= 10 && remaining > 0.3 && repeat !== 'one' && !shuffle);
     if (show && el.upnext.dataset.id !== next.id) {
       const info = infoFor(next);
@@ -637,7 +637,6 @@ export function createScreen(api: any) {
     root.style.setProperty('--blur', `${p.blur}px`);
     root.classList.toggle('animated', p.animatedBg);
     root.classList.toggle('show-clock', p.clock);
-    root.classList.toggle('pin-back', p.backAlwaysVisible);
     viz.setMode(p.visualizer);
     applyMotion();
     setOn(el.ctoggle, p.comments);
@@ -657,7 +656,7 @@ export function createScreen(api: any) {
       queue = qu;
       renderPlayback(playback);
     } catch { /* Nuclear not ready */ }
-    setLyrics(!!prefs?.lyrics);
+    setLyrics(false);
     // Window buttons only when Nuclear draws its own title bar (the one the screen covers)
     Promise.resolve(api.Settings.getGlobal?.('core.appearance.customTitleBar'))
       .then((custom) => root.classList.toggle('custom-titlebar', !!custom && appWindow.available))

@@ -10,12 +10,12 @@ const STALL_MS = 30000;
 const CHECK_MS = 2000;
 const MAX_IN_A_ROW = 5;
 
-export function setupAutoSkip(api: any, isEnabled: () => boolean, notify: (text: string) => void) {
+export function setupAutoSkip(api: any, notify: (text: string) => void) {
   let timer = 0, handled = '', inARow = 0;
   let stalledId: string | null = null, stalledSince = 0;
 
   const skip = async (item: any, reason: 'skipping' | 'noAudio') => {
-    if (handled === item.id || !isEnabled()) return;
+    if (handled === item.id) return;
     handled = item.id;
     if (++inARow > MAX_IN_A_ROW) {
       notify(t('tooManyFailures'));
@@ -31,7 +31,7 @@ export function setupAutoSkip(api: any, isEnabled: () => boolean, notify: (text:
     const item = queue.items?.[queue.currentIndex];
     if (!item) return;
     if (item.status === 'success') inARow = 0;
-    if (item.status !== 'error' || handled === item.id || !isEnabled()) return;
+    if (item.status !== 'error' || handled === item.id) return;
     clearTimeout(timer);
     timer = window.setTimeout(async () => {
       const now = await api.Queue.getCurrentItem().catch(() => null);
@@ -41,7 +41,6 @@ export function setupAutoSkip(api: any, isEnabled: () => boolean, notify: (text:
 
   // Stall watch: "playing" with no audio loaded for too long
   const stallCheck = window.setInterval(async () => {
-    if (!isEnabled()) return;
     const [item, state] = await Promise.all([
       api.Queue.getCurrentItem().catch(() => null),
       api.Playback.getState().catch(() => null),

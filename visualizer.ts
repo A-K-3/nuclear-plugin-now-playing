@@ -51,6 +51,8 @@ export class Visualizer {
   private bins = { rate: 0, edges: [] as number[], bassFrom: 1, bassTo: 2 };
   private gradient: CanvasGradient | null = null;
   private gradientKey = '';
+  private waveFill: CanvasGradient | null = null;
+  private waveGradientKey = '';
   private settled = false;
   private lastColor = '';
   private resize: ResizeObserver;
@@ -110,7 +112,7 @@ export class Visualizer {
     this.updateSource(playing, now);
     const live = this.hasSignal && !!this.analyser;
     // Skip the FFT while paused unless the bars are still settling
-    if (live && (playing || (this.mode === 'bars' && !this.settled))) this.analyser!.getByteFrequencyData(this.freq);
+    if (live && (playing || !this.settled)) this.analyser!.getByteFrequencyData(this.freq);
     this.updateLevels(live && playing);
     if (this.mode === 'off') return;
 
@@ -131,25 +133,10 @@ export class Visualizer {
     g.globalAlpha = this.opacity;
     const dpr = window.devicePixelRatio || 1;
 
+    // Both modes draw the same smoothed, auto-gained spectrum: as bars, or as a smooth curve
+    const moving = this.updateBars(live);
+    this.settled = !moving && (!playing || this.opacity === 0);
     if (this.mode === 'bars') {
-      const { edges } = this.bands();
-      // Pass 1: raw band levels and the frame peak; pass 2: normalise against the decaying peak
-      let frameMax = 0;
-      if (live) {
-        for (let i = 0; i < BARS; i++) {
-          this.raw[i] = this.bandAvg(edges[i], Math.max(edges[i] + 1, edges[i + 1])) * (1 + (i / BARS) * TREBLE_BOOST);
-          frameMax = Math.max(frameMax, this.raw[i]);
-        }
-      }
-      this.peak = Math.max(frameMax, this.peak * PEAK_DECAY);
-      let moving = false;
-      for (let i = 0; i < BARS; i++) {
-        const v = live ? Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, MIN_PEAK)), GAIN_CURVE) * HEADROOM : 0;
-        const delta = (v - this.smooth[i]) * (v > this.smooth[i] ? 0.5 : 0.12);
-        if (Math.abs(delta) > 0.0005) moving = true;
-        this.smooth[i] += delta;
-      }
-      this.settled = !moving && (!playing || this.opacity === 0);
       const gap = 3 * dpr, bw = (w - gap * (BARS - 1)) / BARS;
       g.fillStyle = this.barGradient(color, h);
       for (let i = 0; i < BARS; i++) {
@@ -159,24 +146,61 @@ export class Visualizer {
         g.fill();
       }
     } else {
-      // updateSource already read the waveform this frame while playing
-      if (live && !playing) this.analyser!.getByteTimeDomainData(this.wave);
-      g.lineWidth = 2.5 * dpr;
-      g.strokeStyle = color;
-      g.shadowColor = color; g.shadowBlur = 12 * dpr;
+      // Bass at both edges (beside the controls, where it stays visible) and treble in the middle,
+      // mirrored above and below the centre line
+      const mid = h / 2, amp = h * 0.46, n = BARS * 2 - 1;
+      const band = (k: number) => this.smooth[BARS - 1 - Math.abs(k - (BARS - 1))];
+      // A light blur across neighbouring bands softens the lobes
+      const level = (k: number) =>
+        Math.max(0.015, (band(Math.max(0, k - 1)) + 2 * band(k) + band(Math.min(n - 1, k + 1))) / 4) * amp;
+      const x = (k: number) => (k / (n - 1)) * w;
+      // Quadratic segments through the midpoints give a smooth curve; sign -1 traces the top edge
+      const trace = (sign: number, reverse: boolean) => {
+        for (let s = 1; s < n - 1; s++) {
+          const k = reverse ? n - 1 - s : s, next = reverse ? k - 1 : k + 1;
+          g.quadraticCurveTo(x(k), mid + sign * level(k), (x(k) + x(next)) / 2, mid + sign * (level(k) + level(next)) / 2);
+        }
+        const last = reverse ? 0 : n - 1;
+        g.lineTo(x(last), mid + sign * level(last));
+      };
       g.beginPath();
-      const n = 256, step = this.wave.length / n;
-      for (let i = 0; i < n; i++) {
-        const x = (i / (n - 1)) * w;
-        const v = live ? (this.wave[Math.floor(i * step)] - 128) / 128 : 0;
-        const y = h / 2 + v * h * 0.45;
-        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
-      }
+      g.moveTo(0, mid - level(0));
+      trace(-1, false);
+      g.lineTo(w, mid + level(n - 1));
+      trace(1, true);
+      g.closePath();
+      g.fillStyle = this.waveGradient(color, h);
+      g.fill();
+      // Glowing outline on both edges
+      g.lineWidth = 2 * dpr;
+      g.strokeStyle = color;
+      g.shadowColor = color; g.shadowBlur = 10 * dpr;
       g.stroke();
       g.shadowBlur = 0;
-      this.settled = !playing || this.opacity === 0;
     }
     g.globalAlpha = 1;
+  }
+
+  // Spectrum into BARS smoothed levels (0–1), scaled against the recent peak. Returns whether still moving.
+  private updateBars(live: boolean) {
+    const { edges } = this.bands();
+    // Pass 1: raw band levels and the frame peak; pass 2: normalise against the decaying peak
+    let frameMax = 0;
+    if (live) {
+      for (let i = 0; i < BARS; i++) {
+        this.raw[i] = this.bandAvg(edges[i], Math.max(edges[i] + 1, edges[i + 1])) * (1 + (i / BARS) * TREBLE_BOOST);
+        frameMax = Math.max(frameMax, this.raw[i]);
+      }
+    }
+    this.peak = Math.max(frameMax, this.peak * PEAK_DECAY);
+    let moving = false;
+    for (let i = 0; i < BARS; i++) {
+      const v = live ? Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, MIN_PEAK)), GAIN_CURVE) * HEADROOM : 0;
+      const delta = (v - this.smooth[i]) * (v > this.smooth[i] ? 0.5 : 0.12);
+      if (Math.abs(delta) > 0.0005) moving = true;
+      this.smooth[i] += delta;
+    }
+    return moving;
   }
 
   // Bass energy drives `level`; jumps above its running average drive `pulse`
@@ -274,6 +298,18 @@ export class Visualizer {
     const end = Math.min(to, this.freq.length);
     for (let b = from; b < end; b++) sum += this.freq[b];
     return sum / (to - from) / 255;
+  }
+
+  private waveGradient(color: string, h: number) {
+    const key = `${color}|${h}`;
+    if (key !== this.waveGradientKey || !this.waveFill) {
+      this.waveFill = this.g.createLinearGradient(0, 0, 0, h);
+      this.waveFill.addColorStop(0, 'rgba(255,255,255,0)');
+      this.waveFill.addColorStop(0.5, color);
+      this.waveFill.addColorStop(1, 'rgba(255,255,255,0)');
+      this.waveGradientKey = key;
+    }
+    return this.waveFill;
   }
 
   private barGradient(color: string, h: number) {

@@ -71,16 +71,8 @@ const en = {
   setVizBars: 'Bars',
   setVizWave: 'Wave',
   setClock: 'Show clock',
-  setBackVisible: 'Always show “Back”',
-  setBackVisibleDesc: 'When off, it hides after 3 s without mouse movement.',
-  setUpNext: '“Up next” card',
-  setUpNextDesc: 'Shows the next song during the last 10 seconds.',
-  setSkipFailed: 'Skip songs that fail to load',
-  setSkipFailedDesc: 'Moves on to the next song when one cannot be loaded.',
   setComments: 'SoundCloud comments',
   setCommentsDesc: 'Shows comments at the second they were written.',
-  setLyrics: 'Open with lyrics',
-  setLyricsDesc: 'Shows the lyrics panel when the screen opens (L key).',
 };
 
 type Key = keyof typeof en;
@@ -150,16 +142,8 @@ const es: Record<Key, string> = {
   setVizBars: 'Barras',
   setVizWave: 'Onda',
   setClock: 'Mostrar reloj',
-  setBackVisible: '«Volver» siempre visible',
-  setBackVisibleDesc: 'Si está desactivado, se oculta tras 3 s sin mover el ratón.',
-  setUpNext: 'Aviso de «A continuación»',
-  setUpNextDesc: 'Tarjeta con la siguiente canción en los últimos 10 segundos.',
-  setSkipFailed: 'Saltar canciones que fallan',
-  setSkipFailedDesc: 'Pasa a la siguiente si una no se puede cargar.',
   setComments: 'Comentarios de SoundCloud',
   setCommentsDesc: 'Muestra los comentarios en el segundo en que se escribieron.',
-  setLyrics: 'Abrir con letras',
-  setLyricsDesc: 'Muestra el panel de letras al abrir la pantalla (tecla L).',
 };
 
 let strings: Record<Key, string> = en;

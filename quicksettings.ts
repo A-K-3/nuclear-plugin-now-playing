@@ -5,17 +5,13 @@ import { t } from './i18n';
 import { esc } from './util';
 import type { Prefs } from './settings';
 
-type ToggleKey = 'effects' | 'animatedBg' | 'clock' | 'backAlwaysVisible' | 'upNext' | 'skipFailed' | 'comments' | 'lyrics';
+type ToggleKey = 'effects' | 'animatedBg' | 'clock' | 'comments';
 
 const TOGGLES: Array<[ToggleKey, Parameters<typeof t>[0]]> = [
   ['effects', 'setEffects'],
   ['animatedBg', 'setAnimatedBg'],
   ['clock', 'setClock'],
-  ['backAlwaysVisible', 'setBackVisible'],
-  ['upNext', 'setUpNext'],
   ['comments', 'setComments'],
-  ['lyrics', 'setLyrics'],
-  ['skipFailed', 'setSkipFailed'],
 ];
 const VISUALIZER: Array<[Prefs['visualizer'], Parameters<typeof t>[0]]> = [
   ['off', 'setVizOff'], ['bars', 'setVizBars'], ['wave', 'setVizWave'],

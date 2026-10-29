@@ -197,7 +197,7 @@ ${R}.custom-titlebar .winctl { display:flex; }
 ${R}.custom-titlebar .corner [data-act="full"] { display:none; } /* the window buttons already maximize */
 ${R} .winctl .winclose:hover { color:#ff6b6b; }
 ${R}.idle { cursor:none; }
-${R}.idle .corner, ${R}.idle:not(.pin-back) .back { opacity:0; }
+${R}.idle .corner, ${R}.idle .back { opacity:0; }
 
 /* "Up next" card and toasts */
 ${R} .upnext { position:absolute; left:20px; bottom:20px; z-index:3; display:flex; gap:12px; align-items:center; padding:10px 18px 10px 10px;
