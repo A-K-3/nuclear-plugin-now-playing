@@ -1,0 +1,13 @@
+{
+  "name": "nuclear-plugin-now-playing",
+  "version": "1.0.0",
+  "description": "Fullscreen now-playing screen for Nuclear: big artwork, synced lyrics, SoundCloud timed comments, visualizer and a searchable queue",
+  "author": "A-K-3",
+  "license": "MIT",
+  "main": "index.ts",
+  "repository": "github:A-K-3/nuclear-plugin-now-playing",
+  "nuclear": {
+    "displayName": "Now Playing",
+    "categories": ["other", "playlists"]
+  }
+}
