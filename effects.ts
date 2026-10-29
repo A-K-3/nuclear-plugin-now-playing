@@ -28,7 +28,7 @@ type Elements = {
 };
 
 type Levels = { readonly level: number; readonly pulse: number };
-type StyleKey = 'transform' | 'opacity' | 'translate';
+type StyleKey = 'transform' | 'opacity' | 'translate' | 'scale';
 
 export class Effects {
   private enabled = false;
@@ -72,7 +72,8 @@ export class Effects {
     this.set(flash, 'opacity', (pulse * 0.28).toFixed(3));
     // The background jolts on each kick: a short random shake plus a slight zoom
     const shake = pulse * pulse * BACKDROP_KICK.shake;
-    const sx = -c.x * BACKDROP_SHIFT + (Math.random() * 2 - 1) * shake, sy = -c.y * BACKDROP_SHIFT + (Math.random() * 2 - 1) * shake;
+    const jolt = () => (Math.random() * 2 - 1) * shake;
+    const sx = -c.x * BACKDROP_SHIFT + jolt(), sy = -c.y * BACKDROP_SHIFT + jolt();
     this.set(backdrop, 'translate', `${sx.toFixed(2)}% ${sy.toFixed(2)}%`);
     this.set(backdrop, 'scale', (1 + pulse * BACKDROP_KICK.zoom).toFixed(4));
     this.set(info, 'translate', `${(-c.x * INFO_SHIFT.x).toFixed(1)}px ${(-c.y * INFO_SHIFT.y).toFixed(1)}px`);
