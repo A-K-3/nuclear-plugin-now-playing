@@ -31,7 +31,7 @@ const html = () => `
     <div class="corner">
       <button data-act="comments" class="ctoggle" title="${t('commentsTitle')}">${svg(ICON.comment)}</button>
       <button data-act="queue" class="qtoggle" title="${t('queueToggleTitle')}">${svg(ICON.list)}</button>
-      <button data-act="full" title="${t('fullscreenTitle')}">${svg(ICON.full)}</button>
+      <button data-act="full" title="${t(appWindow.available ? 'maximizeTitle' : 'fullscreenTitle')}">${svg(ICON.full)}</button>
       <span class="winctl">
         <button data-act="winMin" title="${t('winMinimize')}">${svg(ICON.winMin)}</button>
         <button data-act="winMax" title="${t('winMaximize')}">${svg(ICON.winMax)}</button>
@@ -489,26 +489,13 @@ export function createScreen(api: any) {
     if (on) lyrics.load(currentItem()?.track);
   };
 
-  // HTML fullscreen inside Nuclear's window (Tauri/WebView2) can leave the page at the old window size,
-  // with a black strip where the taskbar was. Check once the window has resized (or the wait runs out)
-  // and, if the page still does not fill the screen, leave fullscreen and explain why.
-  const FULLSCREEN_SETTLE_MS = 800, FULLSCREEN_TOLERANCE_PX = 4;
+  // Inside Nuclear the window cannot go fullscreen (no set_fullscreen capability) and HTML fullscreen only
+  // fills the webview, which the screen already covers. The closest real action is maximizing the window.
+  // Outside Nuclear (a plain browser) it is regular fullscreen.
   const fullscreen = () => {
-    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
-    root.requestFullscreen?.().then(() => {
-      let timer = 0;
-      const check = () => {
-        clearTimeout(timer);
-        window.removeEventListener('resize', onResize);
-        if (document.fullscreenElement && window.innerHeight < screen.height - FULLSCREEN_TOLERANCE_PX) {
-          document.exitFullscreen().catch(() => {});
-          toast(t('fullscreenBroken'));
-        }
-      };
-      const onResize = () => setTimeout(check, 100);
-      window.addEventListener('resize', onResize);
-      timer = window.setTimeout(check, FULLSCREEN_SETTLE_MS);
-    }).catch(() => {});
+    if (appWindow.available) { appWindow.toggleMaximize(); return; }
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else root.requestFullscreen?.().catch(() => {});
   };
 
   const toggleFav = async () => {

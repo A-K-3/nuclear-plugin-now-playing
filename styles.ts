@@ -172,6 +172,7 @@ ${R} .corner .off { opacity:.4; }
 ${R} .dragbar { position:absolute; top:0; left:0; right:0; height:48px; z-index:2; }
 ${R} .winctl { display:none; gap:2px; margin-left:6px; padding-left:6px; border-left:1px solid var(--faint); }
 ${R}.custom-titlebar .winctl { display:flex; }
+${R}.custom-titlebar .corner [data-act="full"] { display:none; } /* the window buttons already maximize */
 ${R} .winctl .winclose:hover { color:#ff6b6b; }
 ${R}.idle { cursor:none; }
 ${R}.idle .corner, ${R}.idle:not(.pin-back) .back { opacity:0; }

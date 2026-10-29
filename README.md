@@ -61,7 +61,7 @@ Open the screen with the button next to the volume control, press <kbd>F9</kbd>,
 | <kbd>C</kbd> | SoundCloud comments |
 | <kbd>Q</kbd> | Show / hide the queue |
 | <kbd>/</kbd> | Search the queue |
-| <kbd>F</kbd> | Fullscreen |
+| <kbd>F</kbd> | Maximize / restore the window (fullscreen outside Nuclear) |
 | <kbd>Esc</kbd> | Back to Nuclear |
 
 ## Settings
