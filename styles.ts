@@ -95,6 +95,10 @@ ${R} .sc-markers { position:absolute; left:0; right:0; bottom:13px; height:12px;
 ${R} .sc-markers i { position:absolute; bottom:0; width:2px; margin-left:-1px; border-radius:1px; background:var(--accent); opacity:.45; }
 ${R} .times { display:flex; justify-content:space-between; font-size:13px; color:var(--dim); font-variant-numeric:tabular-nums; }
 ${R} .times .sc-status { opacity:.8; }
+${R} .times .loading-note { display:none; color:var(--accent); animation:npx-blink 1.4s ease-in-out infinite; }
+${R}.loading .times .loading-note { display:inline; }
+${R}.loading .times .sc-status { display:none; }
+@keyframes npx-blink { 50% { opacity:.35 } }
 
 /* Glass dock holding the controls and the volume */
 ${R} .dock { display:flex; flex-direction:column; align-items:center; gap:1.4vh; padding:1.6vh clamp(18px,2.4vw,40px) 1.4vh;

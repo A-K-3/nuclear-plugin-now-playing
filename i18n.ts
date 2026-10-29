@@ -50,6 +50,8 @@ const en = {
   comments: '{n} comments',
   // Auto-skip
   skipping: 'Could not load “{title}”; skipping to the next song',
+  noAudio: 'No audio source found for “{title}”; skipping to the next song',
+  loadingAudio: 'Loading audio…',
   tooManyFailures: 'Several songs in a row failed; auto-skip paused. Check your connection.',
   thisSong: 'this song',
   // Settings
@@ -148,6 +150,8 @@ const es: Record<Key, string> = {
   lyricsSource: 'Letra: {provider}',
   comments: '{n} comentarios',
   skipping: 'No se pudo cargar «{title}»; paso a la siguiente',
+  noAudio: 'No se encontró audio para «{title}»; paso a la siguiente',
+  loadingAudio: 'Cargando audio…',
   tooManyFailures: 'Varias canciones seguidas fallan; paro de saltar. ¿Hay conexión?',
   thisSong: 'la canción',
   setOpen: 'Pantalla de reproducción',

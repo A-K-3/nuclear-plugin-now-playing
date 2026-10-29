@@ -47,7 +47,7 @@ const html = () => `
         <div class="info"><div class="title">—</div><div class="artist"></div><div class="album"></div></div>
         <div class="timeline">
           <div class="slider seek"><div class="sc-markers"></div><div class="fill"></div><div class="knob"></div></div>
-          <div class="times"><span class="cur">0:00</span><span class="sc-status"></span><span class="dur">0:00</span></div>
+          <div class="times"><span class="cur">0:00</span><span class="sc-status"></span><span class="loading-note">${t('loadingAudio')}</span><span class="dur">0:00</span></div>
         </div>
         <div class="dock">
         <div class="controls">
@@ -137,7 +137,9 @@ export function createScreen(api: any) {
   const currentItem = () => queue.items?.[queue.currentIndex];
   const position = () => {
     const { status, seek, duration, at } = state;
-    return Math.min(duration || Infinity, (seek || 0) + (status === 'playing' ? (performance.now() - at) / 1000 : 0));
+    // Without a duration nothing is loaded yet: do not run a clock for audio that is not playing
+    if (!duration) return seek || 0;
+    return Math.min(duration, (seek || 0) + (status === 'playing' ? (performance.now() - at) / 1000 : 0));
   };
 
   const lyrics = new LyricsPanel(api, q('.lyrics'), (s) => api.Playback.seekTo(s));
@@ -362,6 +364,8 @@ export function createScreen(api: any) {
     if (!seekDrag) state = { ...s, at: performance.now() };
     el.playIcon.setAttribute('d', s.status === 'playing' ? ICON.pause : ICON.play);
     root.classList.toggle('paused', s.status !== 'playing');
+    // "Playing" with no duration means the stream is still being found or loaded
+    root.classList.toggle('loading', s.status === 'playing' && !s.duration);
   }
   function renderVolume(v: number) {
     el.volFill.style.width = v * 100 + '%';
