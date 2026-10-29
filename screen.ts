@@ -124,7 +124,7 @@ export function createScreen(api: any) {
   let lastModes = '';
   const infoCache = new Map<string, ItemInfo>();
   const unsubs: Array<() => void> = [];
-  let raf = 0, poll = 0, idleTimer = 0, clockTimer = 0, toastTimer = 0;
+  let raf = 0, poll = 0, idleTimer = 0, clockTimer = 0, toastTimer = 0, idle = false;
 
   const currentItem = () => queue.items?.[queue.currentIndex];
   const position = () => {
@@ -135,10 +135,11 @@ export function createScreen(api: any) {
   const lyrics = new LyricsPanel(api, q('.lyrics'), (s) => api.Playback.seekTo(s));
   const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'), (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
   const viz = new Visualizer(q<HTMLCanvasElement>('.viz'), () => accentColor);
-  const effects = new Effects(root, {
-    wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine'),
-    pulse: q('.pulse'), backdrop: q('.backdrop'), info: q('.info'),
-  }, () => viz);
+  const effects = new Effects({
+    wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine i'),
+    flash: q('.pulse'), backdrop: q('.backdrop'), info: q('.info'),
+  }, viz);
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
   function toast(text: string) {
     el.toast.textContent = text;
@@ -413,8 +414,8 @@ export function createScreen(api: any) {
     const playing = state.status === 'playing';
     if (showLyrics) lyrics.update(pos);
     comments.update(pos, playing);
-    viz.draw(playing);
-    effects.update(performance.now());
+    viz.draw(playing); // updates the beat levels that effects.update reads
+    effects.update(performance.now(), idle);
     renderUpNext(pos);
     raf = requestAnimationFrame(tick);
   }
@@ -476,16 +477,24 @@ export function createScreen(api: any) {
   };
 
   // HTML fullscreen inside Nuclear's window (Tauri/WebView2) can leave the page at the old window size,
-  // with a black strip where the taskbar was. When that happens, leave fullscreen and explain why.
+  // with a black strip where the taskbar was. Check once the window has resized (or the wait runs out)
+  // and, if the page still does not fill the screen, leave fullscreen and explain why.
+  const FULLSCREEN_SETTLE_MS = 800, FULLSCREEN_TOLERANCE_PX = 4;
   const fullscreen = () => {
     if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
     root.requestFullscreen?.().then(() => {
-      setTimeout(() => {
-        if (document.fullscreenElement && window.innerHeight < screen.height - 4) {
+      let timer = 0;
+      const check = () => {
+        clearTimeout(timer);
+        window.removeEventListener('resize', onResize);
+        if (document.fullscreenElement && window.innerHeight < screen.height - FULLSCREEN_TOLERANCE_PX) {
           document.exitFullscreen().catch(() => {});
           toast(t('fullscreenBroken'));
         }
-      }, 600);
+      };
+      const onResize = () => setTimeout(check, 100);
+      window.addEventListener('resize', onResize);
+      timer = window.setTimeout(check, FULLSCREEN_SETTLE_MS);
     }).catch(() => {});
   };
 
@@ -562,14 +571,30 @@ export function createScreen(api: any) {
   };
   window.addEventListener('keydown', onKey, true);
 
+  // One idle detector for the screen: hides the cursor and controls, and lets the artwork float
+  const IDLE_MS = 3000;
+  const setIdle = (value: boolean) => { idle = value; root.classList.toggle('idle', value); };
   const wake = () => {
-    root.classList.remove('idle');
+    setIdle(false);
     clearTimeout(idleTimer);
-    idleTimer = window.setTimeout(() => root.classList.add('idle'), 3000);
+    idleTimer = window.setTimeout(() => setIdle(true), IDLE_MS);
   };
-  root.addEventListener('mousemove', wake);
+  root.addEventListener('mousemove', (e) => {
+    // The screen is fixed to the viewport, so the viewport size maps the cursor to -1…1
+    effects.point((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1);
+    wake();
+  });
 
   const tickClock = () => { el.clock.textContent = new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
+
+  // Motion effects need the setting on and no OS request for reduced motion; re-evaluated when either changes
+  function applyMotion() {
+    const motion = !!prefs?.effects && !reducedMotion?.matches;
+    root.classList.toggle('fx', motion);
+    effects.setEnabled(motion);
+    viz.setAnalyze(motion);
+  }
+  reducedMotion?.addEventListener('change', applyMotion);
 
   function applyPrefs(p: Prefs) {
     const prev = prefs;
@@ -579,7 +604,7 @@ export function createScreen(api: any) {
     root.classList.toggle('show-clock', p.clock);
     root.classList.toggle('pin-back', p.backAlwaysVisible);
     viz.setMode(p.visualizer);
-    viz.setAnalyze(effects.setEnabled(p.effects));
+    applyMotion();
     setOn(el.ctoggle, p.comments);
     comments.setEnabled(p.comments);
     if (open && p.comments && !prev?.comments) comments.load(currentItem()?.track);
@@ -651,7 +676,8 @@ export function createScreen(api: any) {
     destroy() {
       hide();
       viz.destroy();
-      effects.destroy();
+      effects.setEnabled(false);
+      reducedMotion?.removeEventListener('change', applyMotion);
       observer.disconnect();
       window.removeEventListener('keydown', onKey, true);
       document.getElementById(BTN_ID)?.remove();

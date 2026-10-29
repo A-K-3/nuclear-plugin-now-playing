@@ -1,16 +1,32 @@
-// Audio visualizer. Nuclear does not expose its audio graph to plugins, so this captures the
-// playing <audio> element with captureStream() into a separate AudioContext that is never
-// connected to the speakers (no double audio, Nuclear's EQ/crossfade untouched).
+// Audio visualizer and beat detection. Nuclear does not expose its audio graph to plugins, so this
+// captures the playing <audio> element with captureStream() into a separate AudioContext that is
+// never connected to the speakers (no double audio, Nuclear's EQ/crossfade untouched).
 // Nuclear alternates two <audio> elements for crossfading: if the captured one stays silent
 // while music plays, the next candidate is tried. When no element yields a signal (for example
 // a stream the browser will not let us read), the bars fade out instead of faking movement.
 import type { Prefs } from './settings';
+import { clamp } from './util';
 
 type VisualizerMode = Prefs['visualizer'];
 
 const BARS = 64;
 const SILENCE_MS = 1500; // silence while playing before trying another element
 const RETRY_MS = 5000; // how often to retry once every element has been tried
+const MIN_HZ = 40; // bars span MIN_HZ … MIN_HZ * SPAN on a log scale (40 Hz – 16 kHz)
+const SPAN = 400;
+// Automatic gain: bars are scaled against the recent peak so a loud master does not pin every bar at
+// the top and a quiet song still moves; the curve keeps sustained energy low and lets hits stand out.
+const PEAK_DECAY = 0.996;
+const MIN_PEAK = 0.2;
+const GAIN_CURVE = 2.2;
+const HEADROOM = 0.92;
+const TREBLE_BOOST = 0.3; // higher bands carry less energy
+// Beat detection on the bass band
+const BASS_LO_HZ = 40;
+const BASS_HI_HZ = 160;
+const KICK_THRESHOLD = 1.05; // a kick is bass above 105 % of its running average
+const KICK_GAIN = 4;
+const SETTLE_EPSILON = 1e-3;
 
 export class Visualizer {
   private mode: VisualizerMode = 'bars';
@@ -32,8 +48,7 @@ export class Visualizer {
   private g: CanvasRenderingContext2D;
   private width = 0;
   private height = 0;
-  private edges: number[] = [];
-  private edgesRate = 0;
+  private bins = { rate: 0, edges: [] as number[], bassFrom: 1, bassTo: 2 };
   private gradient: CanvasGradient | null = null;
   private gradientKey = '';
   private settled = false;
@@ -41,9 +56,8 @@ export class Visualizer {
   private resize: ResizeObserver;
   private analyze = false; // keep analysing for the beat effects even when the bars are off
   private slowBass = 0;
-  // Bass level (0–1, smoothed) and beat pulse (0–1, spikes on kicks), 0 without a real signal
-  level = 0;
-  pulse = 0;
+  private bassLevel = 0;
+  private kick = 0;
 
   constructor(private canvas: HTMLCanvasElement, private accent: () => string) {
     this.g = canvas.getContext('2d')!;
@@ -55,6 +69,10 @@ export class Visualizer {
     });
     this.resize.observe(canvas);
   }
+
+  // Bass level (0–1, smoothed) and beat pulse (0–1, spikes on kicks); 0 without a real signal
+  get level() { return this.bassLevel; }
+  get pulse() { return this.kick; }
 
   setMode(mode: VisualizerMode) {
     this.mode = mode;
@@ -85,14 +103,15 @@ export class Visualizer {
     this.resize.disconnect();
   }
 
-  // Call every frame
+  // Call every frame, before anything that reads `level`/`pulse`
   draw(playing: boolean) {
     if (!this.capturing()) return;
     const now = performance.now();
     this.updateSource(playing, now);
-    const live = this.hasSignal && this.analyser;
-    if (live) this.analyser!.getByteFrequencyData(this.freq);
-    this.updateLevels(!!live && playing);
+    const live = this.hasSignal && !!this.analyser;
+    // Skip the FFT while paused unless the bars are still settling
+    if (live && (playing || (this.mode === 'bars' && !this.settled))) this.analyser!.getByteFrequencyData(this.freq);
+    this.updateLevels(live && playing);
     if (this.mode === 'off') return;
 
     const { width: w, height: h, g } = this;
@@ -110,35 +129,28 @@ export class Visualizer {
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     g.clearRect(0, 0, w, h);
     g.globalAlpha = this.opacity;
+    const dpr = window.devicePixelRatio || 1;
 
     if (this.mode === 'bars') {
-      const edges = this.barEdges();
-      let moving = false;
-      // Automatic gain: bars are scaled against the recent peak, so a loud master does not pin every
-      // bar at the top and a quiet song still moves. The curve keeps sustained energy low and lets hits stand out.
+      const { edges } = this.bands();
+      // Pass 1: raw band levels and the frame peak; pass 2: normalise against the decaying peak
       let frameMax = 0;
-      for (let i = 0; i < BARS; i++) {
-        let v = 0;
-        if (live) {
-          const from = edges[i], to = Math.max(from + 1, edges[i + 1]);
-          let sum = 0;
-          for (let b = from; b < to && b < this.freq.length; b++) sum += this.freq[b];
-          // higher bands carry less energy: compensate a little
-          const raw = (sum / (to - from) / 255) * (1 + (i / BARS) * 0.3);
-          this.raw[i] = raw;
-          if (raw > frameMax) frameMax = raw;
+      if (live) {
+        for (let i = 0; i < BARS; i++) {
+          this.raw[i] = this.bandAvg(edges[i], Math.max(edges[i] + 1, edges[i + 1])) * (1 + (i / BARS) * TREBLE_BOOST);
+          frameMax = Math.max(frameMax, this.raw[i]);
         }
       }
-      this.peak = Math.max(frameMax, this.peak * 0.996);
+      this.peak = Math.max(frameMax, this.peak * PEAK_DECAY);
+      let moving = false;
       for (let i = 0; i < BARS; i++) {
-        let v = 0;
-        if (live) v = Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, 0.2)), 2.2) * 0.92;
+        const v = live ? Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, MIN_PEAK)), GAIN_CURVE) * HEADROOM : 0;
         const delta = (v - this.smooth[i]) * (v > this.smooth[i] ? 0.5 : 0.12);
         if (Math.abs(delta) > 0.0005) moving = true;
         this.smooth[i] += delta;
       }
       this.settled = !moving && (!playing || this.opacity === 0);
-      const dpr = window.devicePixelRatio || 1, gap = 3 * dpr, bw = (w - gap * (BARS - 1)) / BARS;
+      const gap = 3 * dpr, bw = (w - gap * (BARS - 1)) / BARS;
       g.fillStyle = this.barGradient(color, h);
       for (let i = 0; i < BARS; i++) {
         const bh = Math.max(2 * dpr, this.smooth[i] * h);
@@ -147,8 +159,8 @@ export class Visualizer {
         g.fill();
       }
     } else {
-      if (live) this.analyser!.getByteTimeDomainData(this.wave);
-      const dpr = window.devicePixelRatio || 1;
+      // updateSource already read the waveform this frame while playing
+      if (live && !playing) this.analyser!.getByteTimeDomainData(this.wave);
       g.lineWidth = 2.5 * dpr;
       g.strokeStyle = color;
       g.shadowColor = color; g.shadowBlur = 12 * dpr;
@@ -167,29 +179,26 @@ export class Visualizer {
     g.globalAlpha = 1;
   }
 
-  // Bass energy (≈40–160 Hz) drives `level`; jumps above its running average drive `pulse`
+  // Bass energy drives `level`; jumps above its running average drive `pulse`
   private updateLevels(live: boolean) {
     if (!live) {
-      this.level *= 0.92;
-      this.pulse *= 0.85;
+      this.bassLevel = this.bassLevel * 0.92 < SETTLE_EPSILON ? 0 : this.bassLevel * 0.92;
+      this.kick = this.kick * 0.85 < SETTLE_EPSILON ? 0 : this.kick * 0.85;
       return;
     }
-    const hzPerBin = (this.ctx?.sampleRate || 48000) / 2 / this.freq.length;
-    const from = Math.max(1, Math.round(40 / hzPerBin)), to = Math.max(from + 1, Math.round(160 / hzPerBin));
-    let sum = 0;
-    for (let b = from; b < to; b++) sum += this.freq[b];
-    const bass = sum / (to - from) / 255;
-    this.level += (bass - this.level) * (bass > this.level ? 0.5 : 0.08);
+    const { bassFrom, bassTo } = this.bands();
+    const bass = this.bandAvg(bassFrom, bassTo);
+    this.bassLevel += (bass - this.bassLevel) * (bass > this.bassLevel ? 0.5 : 0.08);
     this.slowBass += (bass - this.slowBass) * 0.02;
-    const kick = Math.min(1, Math.max(0, (bass - this.slowBass * 1.05) * 4));
-    this.pulse = Math.max(kick, this.pulse * 0.88);
+    this.kick = Math.max(clamp((bass - this.slowBass * KICK_THRESHOLD) * KICK_GAIN, 0, 1), this.kick * 0.88);
   }
 
   // Keeps the analyser attached to an <audio> element that actually produces sound
   private updateSource(playing: boolean, now: number) {
     if (this.analyser && playing) {
       this.analyser.getByteTimeDomainData(this.wave);
-      const silent = this.wave.every((v) => Math.abs(v - 128) < 2);
+      let silent = true;
+      for (let i = 0; i < this.wave.length; i++) if (Math.abs(this.wave[i] - 128) >= 2) { silent = false; break; }
       if (!silent) { this.silentSince = 0; this.hasSignal = true; return; }
       this.silentSince ||= now;
       if (now - this.silentSince < SILENCE_MS) return;
@@ -243,17 +252,28 @@ export class Visualizer {
     console.info(`[Now Playing] visualizer: ${message} (src: ${this.element?.currentSrc?.slice(0, 80) || '?'})`);
   }
 
-  // Log-spaced bars from 40 Hz to 16 kHz: start bin of each band (BARS + 1 edges)
-  private barEdges() {
+  // FFT bin ranges for the bars and the bass band, computed once per sample rate
+  private bands() {
     const rate = this.ctx?.sampleRate || 48000;
-    if (rate !== this.edgesRate) {
-      const hzPerBin = rate / 2 / this.freq.length;
-      const edge = (k: number) => Math.max(1, Math.round((40 * Math.pow(400, k / BARS)) / hzPerBin));
-      this.edges = [];
-      for (let k = 0; k <= BARS; k++) this.edges.push(edge(k));
-      this.edgesRate = rate;
+    if (rate !== this.bins.rate) {
+      const bin = (hz: number) => Math.max(1, Math.round(hz / (rate / 2 / this.freq.length)));
+      const bassFrom = bin(BASS_LO_HZ);
+      this.bins = {
+        rate,
+        edges: Array.from({ length: BARS + 1 }, (_, k) => bin(MIN_HZ * Math.pow(SPAN, k / BARS))),
+        bassFrom,
+        bassTo: Math.max(bassFrom + 1, bin(BASS_HI_HZ)),
+      };
     }
-    return this.edges;
+    return this.bins;
+  }
+
+  // Average magnitude (0–1) of the FFT bins [from, to)
+  private bandAvg(from: number, to: number) {
+    let sum = 0;
+    const end = Math.min(to, this.freq.length);
+    for (let b = from; b < end; b++) sum += this.freq[b];
+    return sum / (to - from) / 255;
   }
 
   private barGradient(color: string, h: number) {
@@ -270,6 +290,6 @@ export class Visualizer {
   private disconnect() {
     try { this.source?.disconnect(); } catch { /* already disconnected */ }
     this.source = null; this.analyser = null; this.element = null; this.hasSignal = false;
-    this.level = 0; this.pulse = 0;
+    this.bassLevel = 0; this.kick = 0; this.slowBass = 0; this.peak = 0;
   }
 }

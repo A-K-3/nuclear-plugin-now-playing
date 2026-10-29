@@ -1,69 +1,76 @@
 // Motion effects for the Now Playing screen:
 // - the artwork tilts in 3D towards the cursor, with a glass shine sliding across it;
-//   without mouse movement it floats gently on its own (useful on a second display)
+//   while the screen is idle it floats gently on its own (useful on a second display)
 // - depth: background, artwork and title move by different amounts
-// - beat: the artwork breathes with the bass, its glow and a light pulse follow the kicks
+// - beat: the artwork breathes with the bass, its glow and a light flash follow the kicks
 // - the artwork flips in when the track changes
-// Everything is driven through transform/opacity so it stays on the compositor.
+// Everything is driven through transform/opacity so it stays on the compositor,
+// and a style is only written when its value actually changes.
 
-const IDLE_MS = 3000;
+const PERSPECTIVE = 1200; // px, keep in sync with .cover-wrap in styles.ts
 const TILT_X = 9; // degrees for full vertical travel
 const TILT_Y = 12; // degrees for full horizontal travel
+const EASE = 0.06; // fraction of the remaining distance covered per frame
+const IDLE_DRIFT = { x: 0.35, y: 0.25, speedX: 0.35, speedY: 0.27 };
+const SHINE_SHIFT = 22; // % the shine travels opposite to the tilt
+const BACKDROP_SHIFT = 1.2; // % the background drifts
+const INFO_SHIFT = { x: 6, y: 4 }; // px the title block drifts
 
 type Elements = {
   wrap: HTMLElement;
   cover: HTMLElement;
   glow: HTMLElement;
   shine: HTMLElement;
-  pulse: HTMLElement;
+  flash: HTMLElement;
   backdrop: HTMLElement;
   info: HTMLElement;
 };
 
-type Levels = { level: number; pulse: number };
+type Levels = { readonly level: number; readonly pulse: number };
+type StyleKey = 'transform' | 'opacity' | 'translate';
 
 export class Effects {
   private enabled = false;
   private target = { x: 0, y: 0 };
   private current = { x: 0, y: 0 };
-  private lastMove = 0;
-  private readonly reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  private written = new Map<HTMLElement, Partial<Record<StyleKey, string>>>();
 
-  constructor(private root: HTMLElement, private el: Elements, private levels: () => Levels) {
-    root.addEventListener('pointermove', this.onMove);
-  }
+  constructor(private el: Elements, private levels: Levels) {}
 
-  // Effects run only when enabled in the settings and the OS does not ask for reduced motion
   setEnabled(on: boolean) {
-    this.enabled = on && !this.reducedMotion?.matches;
-    this.root.classList.toggle('fx', this.enabled);
-    if (!this.enabled) this.reset();
-    return this.enabled;
+    this.enabled = on;
+    if (!on) this.reset();
   }
 
-  // Call every frame
-  update(now: number) {
+  // Cursor position over the screen, from -1 to 1 on each axis
+  point(x: number, y: number) {
+    this.target.x = x;
+    this.target.y = y;
+  }
+
+  // Call every frame, after the visualizer has updated the levels
+  update(now: number, idle: boolean) {
     if (!this.enabled) return;
     let tx = this.target.x, ty = this.target.y;
-    if (now - this.lastMove > IDLE_MS) {
+    if (idle) {
       const t = now / 1000;
-      tx = Math.sin(t * 0.35) * 0.35;
-      ty = Math.sin(t * 0.27 + 1) * 0.25;
+      tx = Math.sin(t * IDLE_DRIFT.speedX) * IDLE_DRIFT.x;
+      ty = Math.sin(t * IDLE_DRIFT.speedY + 1) * IDLE_DRIFT.y;
     }
     const c = this.current;
-    c.x += (tx - c.x) * 0.06;
-    c.y += (ty - c.y) * 0.06;
-    const { level, pulse } = this.levels();
-    const { wrap, glow, shine, backdrop, info } = this.el;
+    c.x += (tx - c.x) * EASE;
+    c.y += (ty - c.y) * EASE;
+    const { level, pulse } = this.levels;
+    const { wrap, glow, shine, flash, backdrop, info } = this.el;
 
     const scale = 1 + pulse * 0.035 + level * 0.012;
-    wrap.style.transform = `perspective(1200px) rotateX(${(-c.y * TILT_X).toFixed(2)}deg) rotateY(${(c.x * TILT_Y).toFixed(2)}deg) scale(${scale.toFixed(4)})`;
-    glow.style.opacity = (0.22 + level * 0.55 + pulse * 0.2).toFixed(3);
-    glow.style.transform = `scale(${(1 + level * 0.12 + pulse * 0.08).toFixed(4)})`;
-    (shine.firstElementChild as HTMLElement).style.transform = `translate(${(-c.x * 22).toFixed(2)}%, ${(-c.y * 22).toFixed(2)}%)`;
-    this.el.pulse.style.opacity = (pulse * 0.28).toFixed(3);
-    backdrop.style.translate = `${(-c.x * 1.2).toFixed(2)}% ${(-c.y * 1.2).toFixed(2)}%`;
-    info.style.translate = `${(-c.x * 6).toFixed(1)}px ${(-c.y * 4).toFixed(1)}px`;
+    this.set(wrap, 'transform', `perspective(${PERSPECTIVE}px) rotateX(${(-c.y * TILT_X).toFixed(2)}deg) rotateY(${(c.x * TILT_Y).toFixed(2)}deg) scale(${scale.toFixed(4)})`);
+    this.set(glow, 'opacity', (0.22 + level * 0.55 + pulse * 0.2).toFixed(3));
+    this.set(glow, 'transform', `scale(${(1 + level * 0.12 + pulse * 0.08).toFixed(3)})`);
+    this.set(shine, 'transform', `translate(${(-c.x * SHINE_SHIFT).toFixed(1)}%, ${(-c.y * SHINE_SHIFT).toFixed(1)}%)`);
+    this.set(flash, 'opacity', (pulse * 0.28).toFixed(3));
+    this.set(backdrop, 'translate', `${(-c.x * BACKDROP_SHIFT).toFixed(2)}% ${(-c.y * BACKDROP_SHIFT).toFixed(2)}%`);
+    this.set(info, 'translate', `${(-c.x * INFO_SHIFT.x).toFixed(1)}px ${(-c.y * INFO_SHIFT.y).toFixed(1)}px`);
   }
 
   // 3D flip-in of the artwork on track change
@@ -75,28 +82,20 @@ export class Effects {
     cover.classList.add('flip');
   }
 
-  destroy() {
-    this.root.removeEventListener('pointermove', this.onMove);
-    this.reset();
+  private set(target: HTMLElement, key: StyleKey, value: string) {
+    let styles = this.written.get(target);
+    if (!styles) this.written.set(target, (styles = {}));
+    if (styles[key] === value) return;
+    styles[key] = value;
+    target.style[key] = value;
   }
 
-  private onMove = (e: PointerEvent) => {
-    const r = this.root.getBoundingClientRect();
-    this.target.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-    this.target.y = ((e.clientY - r.top) / r.height) * 2 - 1;
-    this.lastMove = performance.now();
-  };
-
+  // Clears exactly the styles update() wrote
   private reset() {
-    const { wrap, glow, shine, pulse, backdrop, info, cover } = this.el;
-    wrap.style.transform = '';
-    glow.style.opacity = '';
-    glow.style.transform = '';
-    (shine.firstElementChild as HTMLElement).style.transform = '';
-    pulse.style.opacity = '';
-    backdrop.style.translate = '';
-    info.style.translate = '';
-    cover.classList.remove('flip');
+    for (const [target, styles] of this.written) {
+      for (const key of Object.keys(styles) as StyleKey[]) target.style[key] = '';
+    }
+    this.written.clear();
     this.current = { x: 0, y: 0 };
   }
 }
