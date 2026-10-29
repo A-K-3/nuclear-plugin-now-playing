@@ -1,6 +1,7 @@
-// Pantalla de reproducción: portada, info, línea de tiempo, controles, favorito, letras,
-// comentarios de SoundCloud, visualizador y cola (buscable, reordenable, redimensionable y plegable).
+// Now Playing screen: artwork, track info, timeline, controls, favorite, lyrics, SoundCloud
+// comments, visualizer and a queue that can be searched, reordered, resized and collapsed.
 import { SoundCloudComments } from './comments';
+import { locale, t } from './i18n';
 import { ICON, svg } from './icons';
 import { LyricsPanel } from './lyrics';
 import type { Prefs } from './settings';
@@ -12,19 +13,19 @@ export const HOTKEY = 'F9';
 const QUEUE_KEY = 'npx-queue';
 const NEUTRAL_TINT = '40, 40, 48';
 
-const HTML = `
+const html = () => `
 <div class="bg" data-bg="A"></div><div class="bg" data-bg="B" style="opacity:0"></div>
 <div class="blobs"><i></i><i></i><i></i></div>
 <div class="tint"></div>
 <div class="app">
   <section class="player">
     <canvas class="viz"></canvas>
-    <button data-act="close" class="back" title="Volver a Nuclear (Esc)">${svg(ICON.back)}<span>Volver</span></button>
+    <button data-act="close" class="back" title="${t('backTitle')}">${svg(ICON.back)}<span>${t('back')}</span></button>
     <div class="clock"></div>
     <div class="corner">
-      <button data-act="comments" class="ctoggle" title="Comentarios de SoundCloud (C)">${svg(ICON.comment)}</button>
-      <button data-act="queue" class="qtoggle" title="Mostrar u ocultar la cola (Q)">${svg(ICON.list)}</button>
-      <button data-act="full" title="Pantalla completa (F)">${svg(ICON.full)}</button>
+      <button data-act="comments" class="ctoggle" title="${t('commentsTitle')}">${svg(ICON.comment)}</button>
+      <button data-act="queue" class="qtoggle" title="${t('queueToggleTitle')}">${svg(ICON.list)}</button>
+      <button data-act="full" title="${t('fullscreenTitle')}">${svg(ICON.full)}</button>
     </div>
     <div class="stage">
       <div class="main">
@@ -35,44 +36,44 @@ const HTML = `
           <div class="times"><span class="cur">0:00</span><span class="sc-status"></span><span class="dur">0:00</span></div>
         </div>
         <div class="controls">
-          <button data-act="fav" class="fav" title="Favorito (H)">${svg(ICON.heartOutline, 'class="favicon"')}</button>
-          <button data-act="shuffle" class="mode off" title="Aleatorio (S)">${svg(ICON.shuffle)}</button>
-          <button data-act="prev" title="Anterior (←)">${svg(ICON.prev)}</button>
-          <button data-act="toggle" class="toggle" title="Reproducir / pausa (espacio)">${svg(ICON.play, 'class="playicon"')}</button>
-          <button data-act="next" title="Siguiente (→)">${svg(ICON.next)}</button>
-          <button data-act="repeat" class="mode off" title="Repetir (R)">${svg(ICON.repeat)}<span class="one"></span></button>
-          <button data-act="lyrics" class="mode off" title="Letra (L)">${svg(ICON.mic)}</button>
+          <button data-act="fav" class="fav" title="${t('favTitle')}">${svg(ICON.heartOutline, 'class="favicon"')}</button>
+          <button data-act="shuffle" class="mode off" title="${t('shuffleTitle')}">${svg(ICON.shuffle)}</button>
+          <button data-act="prev" title="${t('prevTitle')}">${svg(ICON.prev)}</button>
+          <button data-act="toggle" class="toggle" title="${t('playTitle')}">${svg(ICON.play, 'class="playicon"')}</button>
+          <button data-act="next" title="${t('nextTitle')}">${svg(ICON.next)}</button>
+          <button data-act="repeat" class="mode off" title="${t('repeatTitle')}">${svg(ICON.repeat)}<span class="one"></span></button>
+          <button data-act="lyrics" class="mode off" title="${t('lyricsTitle')}">${svg(ICON.mic)}</button>
         </div>
         <div class="volume">
-          <button data-act="mute" title="Silenciar (M)">${svg(ICON.volHi, 'class="volicon"')}</button>
+          <button data-act="mute" title="${t('muteTitle')}">${svg(ICON.volHi, 'class="volicon"')}</button>
           <div class="slider vol"><div class="fill"></div><div class="knob"></div></div>
         </div>
       </div>
       <div class="lyrics"></div>
     </div>
     <div class="sc-layer"></div>
-    <div class="upnext"><img alt=""><div><small>A continuación</small><b></b><span></span></div></div>
+    <div class="upnext"><img alt=""><div><small>${t('upNext')}</small><b></b><span></span></div></div>
     <div class="toast"></div>
   </section>
   <aside class="queue">
-    <div class="resizer" title="Arrastra para cambiar el ancho · doble clic para restablecerlo"></div>
+    <div class="resizer" title="${t('resizerTitle')}"></div>
     <header>
-      <h2>Cola</h2><span class="count"></span>
-      <button data-act="search" title="Buscar en la cola (/)">${svg(ICON.search)}</button>
-      <button data-act="saveq" title="Guardar la cola como lista">${svg(ICON.save)}</button>
-      <button data-act="queue" title="Plegar la cola (Q)">${svg(ICON.chevron)}</button>
+      <h2>${t('queue')}</h2><span class="count"></span>
+      <button data-act="search" title="${t('searchTitle')}">${svg(ICON.search)}</button>
+      <button data-act="saveq" title="${t('saveQueueTitle')}">${svg(ICON.save)}</button>
+      <button data-act="queue" title="${t('collapseTitle')}">${svg(ICON.chevron)}</button>
     </header>
-    <div class="qbar qsearch"><input type="search" placeholder="Buscar canción o artista…"></div>
-    <div class="qbar qsave"><input type="text"><button data-act="dosave">Guardar</button></div>
+    <div class="qbar qsearch"><input type="search" placeholder="${t('searchPlaceholder')}"></div>
+    <div class="qbar qsave"><input type="text"><button data-act="dosave">${t('save')}</button></div>
     <ul class="list"></ul>
-    <button data-act="goto" class="goto">${svg(ICON.target)}Ir a la actual</button>
+    <button data-act="goto" class="goto">${svg(ICON.target)}${t('goToCurrent')}</button>
   </aside>
 </div>`;
 
-// Marca un botón como activo/inactivo sin tocar el resto de sus clases
+// Marks a button as on/off without touching its other classes
 const setOn = (el: Element, on: boolean) => { el.classList.toggle('on', on); el.classList.toggle('off', !on); };
 
-// Datos derivados de cada canción de la cola, calculados una vez por canción
+// Derived data for each queue item, computed once per item
 type ItemInfo = { track: any; title: string; artist: string; search: string; thumb: string };
 
 export function createScreen(api: any) {
@@ -82,11 +83,12 @@ export function createScreen(api: any) {
 
   const root = document.createElement('div');
   root.id = ROOT_ID;
-  root.innerHTML = HTML;
+  root.lang = locale();
+  root.innerHTML = html();
   document.body.appendChild(root);
   const q = <T extends HTMLElement = HTMLElement>(sel: string) => root.querySelector(sel) as T;
 
-  // Elementos que se actualizan a menudo: se buscan una sola vez
+  // Frequently updated elements, looked up once
   const el = {
     list: q('.list'), count: q('.count'), cur: q('.cur'), dur: q('.dur'),
     seek: q('.seek'), seekFill: q('.seek .fill'), seekKnob: q('.seek .knob'),
@@ -106,10 +108,11 @@ export function createScreen(api: any) {
   let queue: any = { items: [], currentIndex: 0 };
   let accentColor = '#fff';
   let lastCover: string | null = null, lastQueueKey = '', lastCur = -1, lastCurrentId: string | null = null, front = 'A', coverToken = 0;
-  let upcomingSecs = 0; // duración de las canciones posteriores a la actual
+  let upcomingSecs = 0; // total duration of the songs after the current one
   let seekDrag = false, volDrag = false, volume = 1, lastVolume = 1, repeat = 'off', shuffle = false;
   let showLyrics = false, isFav = false, filter = '', upNextShown = false;
-  let lastTime = { cur: '', dur: '', pct: -1 }, lastModes = '';
+  const lastTime = { cur: '', dur: '', pct: -1 };
+  let lastModes = '';
   const infoCache = new Map<string, ItemInfo>();
   const unsubs: Array<() => void> = [];
   let raf = 0, poll = 0, idleTimer = 0, clockTimer = 0, toastTimer = 0;
@@ -121,7 +124,7 @@ export function createScreen(api: any) {
   };
 
   const lyrics = new LyricsPanel(api, q('.lyrics'), (s) => api.Playback.seekTo(s));
-  const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'), (t) => (q('.sc-status').textContent = t ? `💬 ${t}` : ''));
+  const comments = new SoundCloudComments(api, q('.sc-layer'), q('.sc-markers'), (text) => (q('.sc-status').textContent = text ? `💬 ${text}` : ''));
   const viz = new Visualizer(q<HTMLCanvasElement>('.viz'), () => accentColor);
 
   function toast(text: string) {
@@ -131,7 +134,7 @@ export function createScreen(api: any) {
     toastTimer = window.setTimeout(() => el.toast.classList.remove('show'), 3500);
   }
 
-  // --- Portada (siempre directa; el color se calcula aparte) ---
+  // --- Artwork (always loaded directly; colors are computed separately) ---
   const setAccent = (accent: string, tint: string) => {
     accentColor = accent;
     root.style.setProperty('--accent', accent);
@@ -179,7 +182,7 @@ export function createScreen(api: any) {
     return info;
   };
 
-  // --- Canción actual ---
+  // --- Current track ---
   async function refreshFav() {
     const track = currentItem()?.track;
     try { isFav = !!(track?.source && await api.Favorites.isTrackFavorite(track.source)); } catch { isFav = false; }
@@ -192,7 +195,7 @@ export function createScreen(api: any) {
     const track = item?.track, d = display(track);
     const cover = coverFor(track, true);
     if (cover !== lastCover) { lastCover = cover; if (cover) setCover(cover); }
-    el.title.textContent = track ? d.title : 'Nada sonando';
+    el.title.textContent = track ? d.title : t('nothingPlaying');
     el.artist.textContent = d.artist;
     el.album.textContent = track?.album?.title || '';
     const id = item?.id ?? null;
@@ -204,22 +207,24 @@ export function createScreen(api: any) {
     }
   }
 
-  // --- Cola ---
-  // Resalta el texto buscado tal como se escribió (la coincidencia en sí ignora tildes y símbolos)
+  // --- Queue ---
+  // Highlights the search text as typed (matching itself ignores accents and symbols)
   const highlight = (text: string) => {
     const raw = String(text ?? ''), needle = el.searchInput.value.trim().toLowerCase();
     const i = needle ? raw.toLowerCase().indexOf(needle) : -1;
     return i < 0 ? esc(raw) : esc(raw.slice(0, i)) + `<mark>${esc(raw.slice(i, i + needle.length))}</mark>` + esc(raw.slice(i + needle.length));
   };
 
-  // Contador «X / N · quedan …»: barato, se actualiza también con cada aviso de reproducción
+  // "X / N · time left" counter: cheap, also refreshed on every playback event
   function renderCount() {
     const items = queue.items || [];
     const left = upcomingSecs + Math.max(0, (state.duration || 0) - position());
-    el.count.textContent = items.length ? `${queue.currentIndex + 1} / ${items.length}${left > 60 ? ' · quedan ' + fmtLong(left) : ''}` : '';
+    el.count.textContent = items.length
+      ? `${queue.currentIndex + 1} / ${items.length}${left > 60 ? ' · ' + t('timeLeft', { time: fmtLong(left) }) : ''}`
+      : '';
   }
 
-  // Lista de la cola: solo se rehace cuando cambian la cola, la canción actual o la búsqueda
+  // Queue list: rebuilt only when the queue, the current track or the search changes
   function renderQueue(forceScroll = false) {
     const items = queue.items || [], cur = queue.currentIndex;
     upcomingSecs = items.slice(cur + 1).reduce((s: number, it: any) => s + (it.track?.durationMs || 0) / 1000, 0);
@@ -233,7 +238,7 @@ export function createScreen(api: any) {
       for (const id of infoCache.keys()) if (!ids.has(id)) infoCache.delete(id);
     }
     let shown = 0;
-    const html = items.map((it: any, i: number) => {
+    const rows = items.map((it: any, i: number) => {
       const info = infoFor(it), ok = !filter || info.search.includes(filter);
       if (ok) shown++;
       const failed = it.status === 'error';
@@ -242,15 +247,15 @@ export function createScreen(api: any) {
       const dur = it.track?.durationMs ? fmt(it.track.durationMs / 1000) : '';
       return `<li class="${cls}" data-i="${i}" data-id="${esc(it.id)}" draggable="true">
         <img src="${esc(info.thumb)}" loading="lazy" alt="">
-        <div class="t"><b>${eq}${highlight(info.title)}</b><span>${failed ? 'No se pudo cargar' : highlight(info.artist)}</span></div>
-        <div class="end"><span class="dur">${dur}</span><button class="x" title="Quitar de la cola">${svg(ICON.close)}</button></div></li>`;
+        <div class="t"><b>${eq}${highlight(info.title)}</b><span>${failed ? esc(t('loadFailed')) : highlight(info.artist)}</span></div>
+        <div class="end"><span class="dur">${dur}</span><button class="x" title="${t('removeFromQueue')}">${svg(ICON.close)}</button></div></li>`;
     }).join('');
-    el.list.innerHTML = html + (filter && !shown ? '<li class="empty-search">Nada coincide con la búsqueda</li>' : '');
+    el.list.innerHTML = rows + (filter && !shown ? `<li class="empty-search">${esc(t('noMatches'))}</li>` : '');
     if (curChanged || forceScroll) scrollToCurrent();
     updateGoto();
   }
 
-  // Solo desplaza la lista (scrollIntoView movía también la pantalla y la ventana de Nuclear)
+  // Scrolls only the list (scrollIntoView also scrolled the screen and Nuclear's window)
   const currentLi = () => el.list.querySelector<HTMLElement>('.current:not(.hidden)');
   function scrollToCurrent() {
     const li = currentLi();
@@ -263,7 +268,7 @@ export function createScreen(api: any) {
   }
   el.list.addEventListener('scroll', updateGoto, { passive: true });
 
-  // Reordenar arrastrando
+  // Drag to reorder
   let dragFrom = -1;
   const rowAt = (e: Event) => (e.target as HTMLElement).closest('li[data-i]') as HTMLElement | null;
   const clearDrop = () => el.list.querySelectorAll('.drop-before,.drop-after').forEach((li) => li.classList.remove('drop-before', 'drop-after'));
@@ -297,7 +302,7 @@ export function createScreen(api: any) {
   });
   el.list.addEventListener('dragend', () => { clearDrop(); dragFrom = -1; el.list.querySelector('.dragging')?.classList.remove('dragging'); });
 
-  // Buscar en la cola
+  // Search the queue
   const setSearch = (show: boolean) => {
     el.search.classList.toggle('show', show);
     el.searchBtn.classList.toggle('on', show);
@@ -306,12 +311,13 @@ export function createScreen(api: any) {
   };
   el.searchInput.addEventListener('input', () => { filter = norm(el.searchInput.value); renderQueue(); });
 
-  // Guardar la cola como lista
+  // Save the queue as a playlist
   const setSave = (show: boolean) => {
     el.save.classList.toggle('show', show);
     el.saveBtn.classList.toggle('on', show);
     if (show) {
-      el.saveInput.value = `Cola · ${new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+      const date = new Date().toLocaleString(locale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      el.saveInput.value = t('queueName', { date });
       el.saveInput.focus(); el.saveInput.select();
     }
   };
@@ -320,15 +326,15 @@ export function createScreen(api: any) {
     if (!name) return;
     try {
       await api.Playlists.saveQueueAsPlaylist(name);
-      toast(`✓ Cola guardada como «${name}»`);
+      toast(t('queueSaved', { name }));
       setSave(false);
     } catch (e: any) {
-      toast(`✗ No se pudo guardar: ${e?.message || e}`);
+      toast(t('queueSaveFailed', { error: e?.message || e }));
     }
   };
   el.saveInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSave(); });
 
-  // --- Reproducción ---
+  // --- Playback ---
   function renderPlayback(s: any) {
     if (!seekDrag) state = { ...s, at: performance.now() };
     el.playIcon.setAttribute('d', s.status === 'playing' ? ICON.pause : ICON.play);
@@ -340,8 +346,8 @@ export function createScreen(api: any) {
     el.volIcon.setAttribute('d', v === 0 ? ICON.volOff : v < 0.5 ? ICON.volLo : ICON.volHi);
   }
 
-  // Aleatorio, repetir y volumen no tienen suscripción: se consultan cada segundo mientras está abierta
-  // (Settings.subscribe solo ve los ajustes del plugin, no los core.playback.*). Solo se pinta si cambió algo.
+  // Shuffle, repeat and volume have no subscription: polled every second while open
+  // (Settings.subscribe only sees the plugin's own settings, not core.playback.*). Repaints only on change.
   async function refreshModes() {
     try {
       const [sh, rep, vol, muted] = await Promise.all([
@@ -356,10 +362,10 @@ export function createScreen(api: any) {
       setOn(el.repeat, rep !== 'off');
       el.one.textContent = rep === 'one' ? '1' : '';
       if (!volDrag) { volume = v; renderVolume(volume); }
-    } catch { /* noop */ }
+    } catch { /* Nuclear not ready */ }
   }
 
-  // Línea de tiempo: solo escribe en la página cuando cambia lo que se ve
+  // Timeline: writes to the page only when what is shown changes
   function drawTime(pos: number, dur: number) {
     const pct = dur ? Math.round(Math.min(100, (pos / dur) * 100) * 100) / 100 : 0;
     if (pct !== lastTime.pct) {
@@ -424,7 +430,7 @@ export function createScreen(api: any) {
   el.vol.addEventListener('wheel', (e) => { e.preventDefault(); setVolume(volume - Math.sign(e.deltaY) * 0.05); }, { passive: false });
   const toggleMute = () => { if (volume > 0) { lastVolume = volume; setVolume(0); } else setVolume(lastVolume || 0.5); };
 
-  // --- Cola: ancho ajustable y plegable, recordado entre sesiones ---
+  // --- Queue panel: resizable and collapsible, remembered between sessions ---
   const Q_DEFAULT = 340, Q_MIN = 240;
   const qPrefs = storage.get(QUEUE_KEY, { width: Q_DEFAULT, collapsed: false });
   const saveQueuePrefs = () => storage.set(QUEUE_KEY, qPrefs);
@@ -446,7 +452,7 @@ export function createScreen(api: any) {
   resizer.addEventListener('pointerup', () => { app.classList.remove('resizing'); saveQueuePrefs(); });
   resizer.addEventListener('dblclick', () => { qPrefs.width = Q_DEFAULT; applyQueue(); saveQueuePrefs(); });
 
-  // --- Letras, comentarios, favorito, pantalla completa ---
+  // --- Lyrics, comments, favorite, fullscreen ---
   const setLyrics = (on: boolean) => {
     showLyrics = on;
     root.classList.toggle('show-lyrics', on);
@@ -467,7 +473,7 @@ export function createScreen(api: any) {
       else await api.Favorites.addTrack(track);
       el.fav.classList.remove('pop'); void el.fav.offsetWidth; el.fav.classList.add('pop');
       await refreshFav();
-      toast(isFav ? '❤️ Añadida a favoritos' : 'Quitada de favoritos');
+      toast(t(isFav ? 'favAdded' : 'favRemoved'));
     } catch (e: any) { toast(`✗ ${e?.message || e}`); }
   };
 
@@ -502,14 +508,18 @@ export function createScreen(api: any) {
   root.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     const btn = target.closest('[data-act]') as HTMLElement | null;
-    if (btn) return actions[btn.dataset.act!]?.();
+    if (btn) {
+      // Mouse clicks should not leave a focus ring that later shows up when using the keyboard
+      if (e.detail > 0 && btn.tagName === 'BUTTON') btn.blur();
+      return actions[btn.dataset.act!]?.();
+    }
     const li = target.closest('.list li[data-i]') as HTMLElement | null;
     if (!li) return;
     if (target.closest('.x')) api.Queue.removeByIds([li.dataset.id]);
     else api.Queue.goToIndex(+li.dataset.i!);
   });
 
-  // Mientras está abierta, el teclado es suyo (no llega a los atajos de Nuclear)
+  // While open, the screen owns the keyboard (keys do not reach Nuclear's shortcuts)
   const onKey = (e: KeyboardEvent) => {
     if (e.key === HOTKEY) { e.preventDefault(); e.stopPropagation(); return open ? hide() : show(); }
     if (!open) return;
@@ -535,7 +545,7 @@ export function createScreen(api: any) {
   };
   root.addEventListener('mousemove', wake);
 
-  const tickClock = () => { el.clock.textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); };
+  const tickClock = () => { el.clock.textContent = new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
 
   function applyPrefs(p: Prefs) {
     const prev = prefs;
@@ -561,12 +571,12 @@ export function createScreen(api: any) {
       const [qu, playback] = await Promise.all([api.Queue.getQueue(), api.Playback.getState()]);
       queue = qu;
       renderPlayback(playback);
-    } catch { /* noop */ }
+    } catch { /* Nuclear not ready */ }
     setLyrics(!!prefs?.lyrics);
     renderTrack(); renderQueue(true);
     unsubs.push(api.Queue.subscribe((qu: any) => { queue = qu; renderTrack(); renderQueue(); }));
     unsubs.push(api.Playback.subscribe((s: any) => { renderPlayback(s); renderCount(); }));
-    try { unsubs.push(api.Favorites.subscribe(() => refreshFav())); } catch { /* noop */ }
+    try { unsubs.push(api.Favorites.subscribe(() => refreshFav())); } catch { /* favorites unavailable */ }
     poll = window.setInterval(refreshModes, 1000);
     tickClock(); clockTimer = window.setInterval(tickClock, 5000);
     raf = requestAnimationFrame(tick);
@@ -584,8 +594,8 @@ export function createScreen(api: any) {
     comments.clear();
   }
 
-  // Botón en la barra de reproducción de abajo, a la izquierda del volumen.
-  // No es una vía oficial: si una actualización cambia la barra, quedan F9 y el botón de Ajustes.
+  // Button in Nuclear's player bar, left of the volume control.
+  // Not an official extension point: if an update changes the bar, F9 and the settings button still work.
   const injectButton = () => {
     if (document.getElementById(BTN_ID)) return;
     const slot = document.querySelector('[data-testid="player-volume-slider"]')?.parentElement
@@ -593,14 +603,14 @@ export function createScreen(api: any) {
     if (!slot) return;
     const b = document.createElement('button');
     b.id = BTN_ID;
-    b.title = `Pantalla de reproducción (${HOTKEY})`;
+    b.title = t('openButton');
     b.innerHTML = svg(ICON.screen);
     b.onclick = () => show();
     slot.prepend(b);
   };
   let pending = false;
   const observer = new MutationObserver((records) => {
-    // Los cambios dentro de la propia pantalla no pueden haber quitado el botón de Nuclear
+    // Changes inside the screen itself cannot have removed Nuclear's button
     if (pending || records.every((r) => root.contains(r.target))) return;
     pending = true;
     requestAnimationFrame(() => { pending = false; injectButton(); });

@@ -1,10 +1,11 @@
-// Importador de Spotify sin cuenta ni clave: lee el reproductor incrustado (listas y álbumes,
-// hasta 100 canciones) y la página pública de cada canción. Crea una lista de Nuclear con
-// título, artistas, duración y portada; Nuclear busca el audio con tu proveedor de streaming.
-// - Como proveedor de listas: aparece en la pantalla de importar listas de Nuclear.
-// - Como widget de Ajustes: admite pegar muchos enlaces a la vez (uno por línea).
+// Spotify importer with no account or API key: reads the public embed player (playlists and
+// albums, up to 100 songs) and each song's public page. Creates a Nuclear playlist with title,
+// artists, duration and artwork; Nuclear finds the audio through your streaming provider.
+// - As a playlist provider: shows up in Nuclear's import playlist screen.
+// - As a settings widget: accepts many links at once (one per line).
 import React from 'react';
 
+import { locale, t } from './i18n';
 import { BUTTON_STYLE, httpJson, httpText, pool, UA_SIMPLE } from './util';
 
 const LINK = /(?:open\.spotify\.com\/(?:intl-[a-z-]+\/)?|spotify:)(track|playlist|album)[/:]([A-Za-z0-9]{22})/g;
@@ -19,14 +20,14 @@ const parseSpotify = (text: string): Ref[] => {
     .filter((r) => !seen.has(r.type + r.id) && seen.add(r.type + r.id));
 };
 
-// "crossroad - instrumental" → "crossroad" (la versión normal es la que se quiere buscar)
-const cleanTitle = (t: string) =>
-  String(t || '').replace(/\s*[-–]\s*instrumental\s*$/i, '').replace(/\s*\(instrumental\)\s*$/i, '').trim();
+// "crossroad - instrumental" → "crossroad" (search for the regular version)
+const cleanTitle = (title: string) =>
+  String(title || '').replace(/\s*[-–]\s*instrumental\s*$/i, '').replace(/\s*\(instrumental\)\s*$/i, '').trim();
 
 const splitArtists = (s: string) =>
   String(s || '').split(/,\s*| /).map((a) => a.trim()).filter(Boolean);
 
-// Todas las <meta property|name="…" content="…"> de una página, sin depender del orden de los atributos
+// Every <meta property|name="…" content="…"> of a page, regardless of attribute order
 const metaTags = (html: string) => {
   const tags = new Map<string, string>();
   for (const tag of html.match(/<meta\b[^>]*>/g) || []) {
@@ -54,14 +55,15 @@ function makeTrack(o: { id: string; title: string; artists: string[]; durationMs
 async function fetchEmbed(api: any, type: string, id: string) {
   const html = await httpText(api, `https://open.spotify.com/embed/${type}/${id}`);
   const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
-  if (!m) throw new Error(`Spotify no devolvió datos para ${type}/${id}`);
+  if (!m) throw new Error(t('importNoData', { what: `${type}/${id}` }));
   return JSON.parse(m[1])?.props?.pageProps?.state?.data?.entity;
 }
 
 async function fetchTrackPage(api: any, id: string) {
+  // Spotify only includes the og:* metadata for a simple User-Agent
   const meta = metaTags(await httpText(api, `https://open.spotify.com/track/${id}`, 12000, UA_SIMPLE));
   const title = meta.get('og:title');
-  if (!title) throw new Error(`Spotify no devolvió datos de la canción ${id}`);
+  if (!title) throw new Error(t('importNoData', { what: `track/${id}` }));
   const [artists, album] = (meta.get('og:description') || '').split(' · ');
   return makeTrack({
     id, title, artists: splitArtists(artists),
@@ -75,35 +77,35 @@ const coverOf = (entity: any) =>
 
 async function importSpotify(api: any, text: string, onProgress: (msg: string) => void = () => {}, name?: string) {
   const refs = parseSpotify(text);
-  if (!refs.length) throw new Error('No hay enlaces de Spotify (canciones, listas o álbumes).');
+  if (!refs.length) throw new Error(t('importNoLinks'));
   const warnings: string[] = [];
   const tracks: any[] = [];
   let title = '', cover = '';
 
   for (const ref of refs) {
     if (ref.type === 'track') continue;
-    onProgress(`Leyendo ${ref.type === 'album' ? 'álbum' : 'lista'}…`);
+    onProgress(t('importReading', { kind: t(ref.type === 'album' ? 'importAlbum' : 'importPlaylist') }));
     const entity = await fetchEmbed(api, ref.type, ref.id);
     const list = entity?.trackList || [];
-    if (list.length >= EMBED_LIMIT) warnings.push(`«${entity.name}»: Spotify solo deja leer las primeras ${EMBED_LIMIT} canciones.`);
+    if (list.length >= EMBED_LIMIT) warnings.push(t('importLimit', { name: entity.name, n: EMBED_LIMIT }));
     const entityCover = coverOf(entity);
     title ||= entity?.name || '';
     cover ||= entityCover;
     const albumCover = ref.type === 'album' ? entityCover : '';
-    const items = list.map((t: any) => ({
-      id: String(t.uri || '').split(':').pop()!, title: t.title, artists: splitArtists(t.subtitle), durationMs: t.duration,
+    const items = list.map((item: any) => ({
+      id: String(item.uri || '').split(':').pop()!, title: item.title, artists: splitArtists(item.subtitle), durationMs: item.duration,
       cover: albumCover, album: ref.type === 'album' ? { id: ref.id, title: entity.name } : undefined,
     }));
-    // Las listas no traen la portada de cada canción: se pide a Spotify (6 a la vez)
+    // Playlists do not include per-song artwork: ask Spotify for it, 6 at a time
     let done = 0;
     await pool(items, 6, async (it: any) => {
       if (!it.cover) {
         try {
           const o = await httpJson(api, `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${it.id}`);
           it.cover = o.thumbnail_url || '';
-        } catch { /* sin portada */ }
+        } catch { /* no artwork */ }
       }
-      onProgress(`Portadas ${++done}/${items.length}…`);
+      onProgress(t('importCovers', { done: ++done, total: items.length }));
     });
     tracks.push(...items.map(makeTrack));
   }
@@ -112,19 +114,20 @@ async function importSpotify(api: any, text: string, onProgress: (msg: string) =
   let done = 0;
   const singles = await pool(single, 6, async (r) => {
     try {
-      const t = await fetchTrackPage(api, r.id);
-      onProgress(`Canciones ${++done}/${single.length}…`);
-      return t;
+      const track = await fetchTrackPage(api, r.id);
+      onProgress(t('importSongs', { done: ++done, total: single.length }));
+      return track;
     } catch {
-      warnings.push(`No se pudo leer la canción ${r.id}.`);
+      warnings.push(t('importSongFailed', { id: r.id }));
       return null;
     }
   });
   tracks.push(...singles.filter(Boolean));
-  if (!tracks.length) throw new Error('No se pudo leer ninguna canción.');
+  if (!tracks.length) throw new Error(t('importNothing'));
 
   const now = new Date().toISOString();
-  const playlistName = name?.trim() || (refs.length === 1 && title) || `Spotify · ${tracks.length} canciones · ${new Date().toLocaleDateString('es-ES')}`;
+  const playlistName = name?.trim() || (refs.length === 1 && title)
+    || t('importDefaultName', { n: tracks.length, date: new Date().toLocaleDateString(locale()) });
   const first = refs[0];
   const playlistCover = cover || tracks[0]?.artwork?.items?.[0]?.url;
   const playlist = {
@@ -141,14 +144,14 @@ async function importSpotify(api: any, text: string, onProgress: (msg: string) =
 }
 
 export const createSpotifyProvider = (api: any) => ({
-  id: 'ak-spotify',
+  id: 'now-playing-spotify',
   kind: 'playlists',
   name: 'Spotify (Now Playing)',
   matchesUrl: (url: string) => parseSpotify(url).length > 0,
   fetchPlaylistByUrl: async (url: string) => (await importSpotify(api, url)).playlist,
 });
 
-// Widget de Ajustes: pegar enlaces (uno o muchos) y crear la lista directamente
+// Settings widget: paste one or many links and create the playlist directly
 export const createImporterWidget = (getApi: () => any) => () => {
   const [text, setText] = React.useState('');
   const [name, setName] = React.useState('');
@@ -158,12 +161,12 @@ export const createImporterWidget = (getApi: () => any) => () => {
 
   const run = async () => {
     setBusy(true);
-    setStatus('Empezando…');
+    setStatus(t('importStarting'));
     try {
       const api = getApi();
       const { playlist, warnings } = await importSpotify(api, text, setStatus, name);
       await api.Playlists.importPlaylist(playlist);
-      setStatus(`✓ Lista «${playlist.name}» creada con ${playlist.items.length} canciones.${warnings.length ? ' ' + warnings.join(' ') : ''}`);
+      setStatus([t('importDone', { name: playlist.name, n: playlist.items.length }), ...warnings].join(' '));
       setText('');
     } catch (e: any) {
       setStatus(`✗ ${e?.message || e}`);
@@ -172,21 +175,22 @@ export const createImporterWidget = (getApi: () => any) => () => {
     }
   };
 
+  const disabled = busy || !count;
   const box = { width: '100%', padding: 8, borderRadius: 8, border: '1px solid rgba(127,127,127,.4)', background: 'transparent', color: 'inherit', font: 'inherit' };
   return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 560 } },
     React.createElement('textarea', {
       value: text, rows: 5, disabled: busy, style: { ...box, resize: 'vertical' },
-      placeholder: 'https://open.spotify.com/playlist/…\nhttps://open.spotify.com/track/…\n(uno por línea)',
+      placeholder: t('importPlaceholder'),
       onChange: (e: any) => setText(e.target.value),
     }),
     React.createElement('input', {
-      value: name, disabled: busy, style: box, placeholder: 'Nombre de la lista (opcional)',
+      value: name, disabled: busy, style: box, placeholder: t('importNamePlaceholder'),
       onChange: (e: any) => setName(e.target.value),
     }),
     React.createElement('div', { style: { display: 'flex', gap: 12, alignItems: 'center' } },
       React.createElement('button', {
-        onClick: run, disabled: busy || !count,
-        style: { ...BUTTON_STYLE, cursor: busy || !count ? 'default' : 'pointer', opacity: busy || !count ? 0.5 : 1 },
-      }, busy ? 'Importando…' : `Importar${count ? ` (${count} enlace${count > 1 ? 's' : ''})` : ''}`),
+        onClick: run, disabled,
+        style: { ...BUTTON_STYLE, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1 },
+      }, busy ? t('importBusy') : count ? t('importButtonCount', { n: count, s: count > 1 ? 's' : '' }) : t('importButton')),
       React.createElement('span', { style: { fontSize: 13, opacity: 0.8 } }, status)));
 };

@@ -1,5 +1,7 @@
-// Salta a la siguiente canción cuando la actual no se puede cargar (estado «error» en la cola).
-// Para tras 5 fallos seguidos, para no recorrer toda la cola si el problema es la conexión.
+// Skips to the next song when the current one cannot be loaded (queue item status "error").
+// Stops after 5 failures in a row so a connection problem does not burn through the whole queue.
+import { t } from './i18n';
+
 const DELAY_MS = 1500;
 const MAX_IN_A_ROW = 5;
 
@@ -17,11 +19,11 @@ export function setupAutoSkip(api: any, isEnabled: () => boolean, notify: (text:
       const now = await api.Queue.getCurrentItem().catch(() => null);
       if (now?.id !== item.id || now.status !== 'error') return;
       if (++inARow > MAX_IN_A_ROW) {
-        notify('Varias canciones seguidas fallan; paro de saltar. ¿Hay conexión?');
+        notify(t('tooManyFailures'));
         return;
       }
       if (queue.currentIndex >= queue.items.length - 1) return;
-      notify(`No se pudo cargar «${item.track?.title || 'la canción'}»; paso a la siguiente`);
+      notify(t('skipping', { title: item.track?.title || t('thisSong') }));
       api.Queue.goToNext();
     }, DELAY_MS);
   });

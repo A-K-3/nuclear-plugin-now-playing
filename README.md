@@ -1,81 +1,126 @@
-# Now Playing para Nuclear
+<div align="center">
 
-Pantalla completa de «ahora suena» para el reproductor [Nuclear](https://github.com/nukeop/nuclear): portada grande, letras sincronizadas, comentarios de SoundCloud en su segundo exacto, visualizador y una cola que se puede buscar y reordenar. Pensada para dejarla en una segunda pantalla.
+# Now Playing
 
-> *English:* fullscreen now-playing screen for Nuclear with big artwork, synced lyrics, SoundCloud timed comments, an audio visualizer and a searchable, reorderable queue. The interface is in Spanish.
+**A fullscreen now-playing screen for the [Nuclear](https://github.com/nukeop/nuclear) music player.**
 
-## Qué incluye
+Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, designed to run on a second display.
 
-**Pantalla de reproducción.** Se abre con el botón junto al volumen, con **F9** o desde Ajustes.
-- **Portada:** grande, con el fondo difuminado y el color de acento sacados de ella. Si la canción no tiene portada, muestra un degradado con sus iniciales.
-- **Controles:** línea de tiempo, aleatorio, repetir, volumen y favorito ❤️.
-- **Letras sincronizadas:** usan los *plugins* de letras que tengas instalados. Haz clic en una línea para saltar a ella.
-- **Comentarios de SoundCloud:** aparecen flotando en el segundo en que se escribieron, con marcas en la línea de tiempo.
-- **Visualizador:** en barras o en onda. Analiza el audio sin tocar el sonido de Nuclear.
-- **Aviso «A continuación»:** una tarjeta con la siguiente canción en los últimos 10 segundos.
-- **Cola:** se puede buscar, reordenar arrastrando, redimensionar y plegar, y guardar como lista.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Nuclear plugin](https://img.shields.io/badge/Nuclear-plugin-8b5cf6.svg)
 
-**Extras**
-- **Doble clic** en cualquier canción de una lista para reproducirla.
-- **Salto automático** de las canciones que no se pueden cargar.
-- **Importador de Spotify**, sin cuenta ni clave. Funciona desde la pantalla de importar listas de Nuclear, o desde Ajustes pegando muchos enlaces a la vez.
+<img src="docs/demo.webp" alt="Now Playing demo" width="900">
 
-## Instalación
+[Watch the full demo with sound (MP4)](docs/demo.mp4)
 
-**Desde el código:**
-1. Clona el repositorio.
-2. En Nuclear, ve a **Preferences → Plugins → Add Plugin** y elige la carpeta.
-3. Actívalo.
+</div>
 
-**Desde una release:** descarga `plugin.zip` de la [última release](../../releases/latest), descomprímelo en una carpeta y añádela igual que en el paso anterior.
+## Features
 
-## Atajos de teclado (con la pantalla abierta)
+- **Now Playing screen.** Full-bleed artwork with a blurred, color-matched background, plus title, artist, album, seek bar, volume and playback controls.
+- **Synced lyrics.** Line- and word-level highlighting from any lyrics provider installed in Nuclear. Click a line to seek.
+- **SoundCloud timed comments.** Comments appear at the exact second they were posted, with markers on the timeline. This works for songs streamed from any source.
+- **Audio visualizer.** Frequency bars or waveform, driven by the actual audio output.
+- **Queue panel.** Search, drag to reorder, remove, resize, collapse and save the queue as a playlist.
+- **Up next.** A card previews the next song during the last 10 seconds.
+- **Favorites.** Like the current song without leaving the screen.
+- **Double-click to play.** Double-click any track row in Nuclear (playlists, albums, search, favorites) to play it.
+- **Auto-skip.** Songs that fail to load are skipped automatically.
+- **Spotify import.** Turn Spotify playlists, albums or a list of track links into a Nuclear playlist, with no account or API key.
+- **English and Spanish.** The plugin follows Nuclear's language setting.
 
-| Tecla | Acción |
+<p align="center">
+  <img src="docs/screenshot.png" alt="Now Playing screen" width="49%">
+  <img src="docs/lyrics.png" alt="Synced lyrics" width="49%">
+</p>
+
+## Installation
+
+1. Download `plugin.zip` from the [latest release](../../releases/latest) and extract it to a folder.
+2. In Nuclear, open **Preferences → Plugins → Add Plugin** and select that folder.
+3. Enable **Now Playing**.
+
+To run from source, clone this repository and add the cloned folder instead. Nuclear compiles the TypeScript on load.
+
+## Usage
+
+Open the screen with the button next to the volume control, press <kbd>F9</kbd>, or use **Settings → Now Playing**. Press <kbd>Esc</kbd> to return to Nuclear.
+
+| Key | Action |
 |---|---|
-| F9 | Abrir o cerrar la pantalla |
-| Espacio | Reproducir o pausar |
-| ← / → | Canción anterior / siguiente |
-| ↑ / ↓ | Volumen |
-| M | Silenciar |
-| S / R | Aleatorio / repetir |
-| H | Favorito |
-| L | Letras |
-| C | Comentarios de SoundCloud |
-| Q | Mostrar u ocultar la cola |
-| / | Buscar en la cola |
-| F | Pantalla completa |
-| Esc | Volver a Nuclear |
+| <kbd>F9</kbd> | Open / close the screen |
+| <kbd>Space</kbd> | Play / pause |
+| <kbd>←</kbd> <kbd>→</kbd> | Previous / next track |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Volume |
+| <kbd>M</kbd> | Mute |
+| <kbd>S</kbd> / <kbd>R</kbd> | Shuffle / repeat |
+| <kbd>H</kbd> | Favorite |
+| <kbd>L</kbd> | Lyrics |
+| <kbd>C</kbd> | SoundCloud comments |
+| <kbd>Q</kbd> | Show / hide the queue |
+| <kbd>/</kbd> | Search the queue |
+| <kbd>F</kbd> | Fullscreen |
+| <kbd>Esc</kbd> | Back to Nuclear |
 
-## Ajustes
+## Settings
 
-En **Ajustes → Now Playing** puedes cambiar:
-- el desenfoque del fondo y si el fondo está animado
-- el tipo de visualizador
-- el reloj
-- si «Volver» se ve siempre
-- el aviso «A continuación»
-- el salto de canciones que fallan
-- los comentarios de SoundCloud
-- si la pantalla se abre con las letras
+Available under **Settings → Now Playing**:
 
-También están ahí el botón para abrir la pantalla y el importador de Spotify.
+| Setting | Default |
+|---|---|
+| Background blur | 80 px |
+| Animated background | On |
+| Visualizer (off, bars or wave) | Bars |
+| Show clock | Off |
+| Always show “Back” | Off |
+| “Up next” card | On |
+| Skip songs that fail to load | On |
+| SoundCloud comments | On |
+| Open with lyrics | Off |
 
-## Limitaciones
+The Spotify importer is in the same section. You can also paste a Spotify link into Nuclear's **Import playlist** screen.
 
-- **El botón de la barra y el doble clic** se añaden directamente a la interfaz de Nuclear, porque la API de *plugins* no permite añadir botones. Una actualización de Nuclear podría romperlos; F9 y Ajustes seguirían funcionando.
-- **Spotify:** solo deja leer las primeras **100 canciones** de una lista. El importador trae la información de cada canción (título, artistas, duración y portada), y el audio lo busca tu fuente de streaming. Quita el sufijo «- instrumental» del título para que se busque la versión normal.
-- **Comentarios de SoundCloud:** solo se muestran si la canción coincide en SoundCloud por título y, además, por artista o duración.
-- **Visualizador:** usa `captureStream()` sobre el audio de Nuclear. Si no recibe señal, cambia a una animación decorativa.
+## Notes and limitations
 
-## Publicar una versión
+- **No official UI hooks.** Nuclear's plugin API has no way to add UI elements, so the player-bar button and double-click-to-play attach to Nuclear's interface directly. A future Nuclear update could break them. <kbd>F9</kbd> and the settings entry keep working either way.
+- **Visualizer signal.** The visualizer reads the playing `<audio>` element through `captureStream()`. When a stream cannot be captured, the bars fade out and a diagnostic message is written to the developer console.
+- **Spotify import scope.** Spotify's public embed exposes at most 100 tracks per playlist. Imported tracks carry metadata only (title, artists, duration and artwork); Nuclear resolves the audio through your configured streaming provider.
+- **Lyrics provider required.** Lyrics need at least one lyrics plugin installed in Nuclear.
 
-1. Sube la versión en `package.json`.
-2. Haz commit, crea la etiqueta y súbela: `git tag v1.0.1 && git push --tags`.
-3. GitHub Actions comprueba que todo compila y publica la release con `plugin.zip`.
+## Development
 
-Para que aparezca en la tienda de *plugins* de Nuclear, hay que abrir un PR en [NuclearPlayer/plugin-registry](https://github.com/NuclearPlayer/plugin-registry) añadiendo el *plugin* a `plugins.json`.
+The plugin is plain TypeScript with no build step. Nuclear bundles it with esbuild when it loads.
 
-## Licencia
+```
+index.ts        plugin lifecycle (onLoad / onEnable / onDisable)
+screen.ts       Now Playing screen and queue panel
+lyrics.ts       synced lyrics panel
+comments.ts     SoundCloud timed comments
+visualizer.ts   audio visualizer
+importer.ts     Spotify importer (playlist provider + settings widget)
+autoskip.ts     skip songs that fail to load
+doubleclick.ts  double-click to play
+settings.ts     settings definitions
+i18n.ts         English and Spanish strings
+styles.ts       screen styles
+```
+
+Check that it compiles the same way Nuclear does:
+
+```sh
+npx esbuild index.ts --bundle --format=cjs --platform=browser --external:react --outfile=/tmp/check.js
+```
+
+### Releasing
+
+Bump `version` in `package.json`, then push a matching tag:
+
+```sh
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+The release workflow verifies the build and publishes a GitHub release with `plugin.zip`.
+
+## License
 
 [MIT](LICENSE)

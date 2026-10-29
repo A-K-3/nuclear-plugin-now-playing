@@ -1,6 +1,7 @@
-// Comentarios de SoundCloud: aparecen flotando en el segundo exacto en que se escribieron,
-// con marcas en la línea de tiempo. Funciona aunque la canción no suene desde SoundCloud:
-// se busca allí y solo se acepta si coinciden título y (artista o duración).
+// SoundCloud timed comments: they float on screen at the exact second they were written,
+// with markers on the timeline. Works even when the song does not stream from SoundCloud:
+// it is looked up there and only accepted when the title matches plus the artist or duration.
+import { t } from './i18n';
 import { esc, httpJson, httpText, norm, storage } from './util';
 
 const API = 'https://api-v2.soundcloud.com';
@@ -28,13 +29,13 @@ export class SoundCloudComments {
     this.onStatus(this.statusText());
   }
 
-  // Quita las burbujas que estén en pantalla
+  // Removes the bubbles currently on screen
   clear() {
     this.layer.innerHTML = '';
   }
 
   private statusText() {
-    return this.enabled && this.comments.length ? `${this.comments.length} comentarios` : '';
+    return this.enabled && this.comments.length ? t('comments', { n: this.comments.length }) : '';
   }
 
   async load(track: any) {
@@ -53,16 +54,16 @@ export class SoundCloudComments {
       this.drawMarkers();
       this.onStatus(this.statusText());
     } catch (e) {
-      console.warn('[Now Playing] comentarios de SoundCloud:', e);
+      console.warn('[Now Playing] SoundCloud comments:', e);
     }
   }
 
-  // Llamar en cada fotograma con la posición actual
+  // Call every frame with the current position
   update(positionSeconds: number, playing: boolean) {
     if (!this.enabled || !this.comments.length) return;
     const ms = positionSeconds * 1000;
     if (Math.abs(ms - this.lastMs) > 2500) {
-      // Salto (seek): recolocar el puntero sin soltar todos los comentarios intermedios
+      // Seek: reposition the pointer without releasing every comment in between
       this.ptr = this.comments.findIndex((c) => c.ts >= ms);
       if (this.ptr < 0) this.ptr = this.comments.length;
     }
@@ -88,7 +89,7 @@ export class SoundCloudComments {
 
   private drawMarkers() {
     if (!this.durationMs) return;
-    // Agrupa por píxel aproximado para no pintar miles de marcas
+    // Bucket by approximate pixel so thousands of comments do not become thousands of markers
     const buckets = new Map<number, number>();
     for (const c of this.comments) {
       const b = Math.round((c.ts / this.durationMs) * 400);
@@ -99,7 +100,7 @@ export class SoundCloudComments {
       `<i style="left:${b / 4}%;height:${4 + (n / max) * 8}px"></i>`).join('');
   }
 
-  // --- API de SoundCloud ---
+  // --- SoundCloud API ---
 
   private async getClientId(force = false): Promise<string> {
     if (this.clientId && !force) return this.clientId;
@@ -114,7 +115,7 @@ export class SoundCloudComments {
         return this.clientId;
       }
     }
-    throw new Error('No se encontró el client_id de SoundCloud');
+    throw new Error('SoundCloud client_id not found');
   }
 
   private async get(path: string): Promise<any> {
@@ -124,7 +125,7 @@ export class SoundCloudComments {
       return await httpJson(this.api, url + (await this.getClientId()));
     } catch (e: any) {
       if (!/HTTP 40[13]/.test(String(e?.message))) throw e;
-      return httpJson(this.api, url + (await this.getClientId(true))); // client_id caducado
+      return httpJson(this.api, url + (await this.getClientId(true))); // expired client_id
     }
   }
 
@@ -141,16 +142,16 @@ export class SoundCloudComments {
     const title = track.title || '';
     const artists = (track.artists || []).map((a: any) => a.name);
     const res = await this.get(`/search/tracks?q=${encodeURIComponent(`${artists[0] || ''} ${title}`.trim())}&limit=15`);
-    const t = norm(title.replace(/\s*[-(\[].*(instrumental|remix|vip|edit|mix).*$/i, '') || title);
+    const wanted = norm(title.replace(/\s*[-(\[].*(instrumental|remix|vip|edit|mix).*$/i, '') || title);
     let best: any = null, bestScore = 0;
     for (const c of res.collection || []) {
       const ct = norm(c.title);
-      const titleOk = t.length > 1 && (ct.includes(t) || t.includes(ct));
+      const titleOk = wanted.length > 1 && (ct.includes(wanted) || wanted.includes(ct));
       if (!titleOk) continue;
       const who = norm(`${c.user?.username || ''} ${c.publisher_metadata?.artist || ''} ${c.title}`);
       const artistOk = artists.some((a: string) => norm(a).length > 1 && who.includes(norm(a)));
       const durOk = track.durationMs ? Math.abs((c.duration || 0) - track.durationMs) < 4000 : false;
-      const score = (artistOk ? 2 : 0) + (durOk ? 2 : 0) + (ct === t ? 1 : 0) + Math.min(1, (c.comment_count || 0) / 100);
+      const score = (artistOk ? 2 : 0) + (durOk ? 2 : 0) + (ct === wanted ? 1 : 0) + Math.min(1, (c.comment_count || 0) / 100);
       if ((artistOk || durOk) && score > bestScore) { best = c; bestScore = score; }
     }
     return best ? { id: best.id, duration: best.duration } : null;

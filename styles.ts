@@ -1,4 +1,4 @@
-// Estilos de la pantalla de reproducción (todo bajo #npx-root para no afectar a Nuclear)
+// Styles for the Now Playing screen (scoped under #npx-root so Nuclear is not affected)
 export const ROOT_ID = 'npx-root';
 export const BTN_ID = 'npx-open';
 
@@ -16,13 +16,13 @@ ${R} button { background:none; border:0; color:var(--fg); cursor:pointer; paddin
 ${R} button:hover { opacity:1; }
 ${R} button:active { transform:scale(.92); }
 ${R} button:focus { outline:none; }
-${R} button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; }
+${R} button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 ${R} button svg { width:32px; height:32px; display:block; fill:currentColor; }
 ${R} input { font:inherit; color:var(--fg); background:rgba(255,255,255,.08); border:1px solid var(--faint); border-radius:8px;
   padding:7px 10px; outline:none; width:100%; user-select:text; }
 ${R} input:focus { border-color:var(--accent); }
 
-/* Fondo: portada difuminada (opcionalmente animada) + tinte + viñeteado */
+/* Background: blurred artwork (optionally animated) + tint + vignette */
 ${R} .bg { position:absolute; inset:-15%; background:center/cover no-repeat; filter:blur(var(--blur)) brightness(.5) saturate(1.5);
   transform:scale(1.15); transition:opacity 1s; }
 ${R} .blobs { position:absolute; inset:0; overflow:hidden; display:none; }
@@ -45,7 +45,7 @@ ${R} .tint { position:absolute; inset:0; transition:background 1.2s;
 ${R} .app { position:relative; height:100%; display:grid; grid-template-columns:1fr var(--qw,340px); transition:grid-template-columns .3s ease; }
 ${R} .app.resizing { transition:none; cursor:col-resize; }
 
-/* Reproductor */
+/* Player */
 ${R} .player { position:relative; min-width:0; overflow:hidden; }
 ${R} .viz { position:absolute; left:0; right:0; bottom:0; height:24vh; width:100%; opacity:.5; pointer-events:none; z-index:0;
   mask-image:linear-gradient(to top, #000 30%, transparent); }
@@ -55,7 +55,7 @@ ${R} .cover { position:relative; width:min(52vh,46vw); aspect-ratio:1; margin-bo
 ${R} .cover img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:16px;
   box-shadow:0 40px 100px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.06); transition:opacity .7s; }
 ${R} .cover .empty { position:absolute; inset:0; border-radius:16px; background:var(--faint); }
-/* Capa propia: sin esto Chromium dibuja el título grisáceo junto a las capas desenfocadas del fondo */
+/* Own compositing layer: without it Chromium renders the title greyish next to the blurred background layers */
 ${R} .info { text-align:center; width:min(76vh,100%); will-change:transform; transform:translateZ(0); }
 ${R} .info div { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 ${R} .title { font-size:clamp(24px,4.6vh,56px); font-weight:700; line-height:1.15; }
@@ -92,7 +92,7 @@ ${R} .volume button { padding:4px; color:var(--dim); }
 ${R} .volume button svg { width:20px; height:20px; }
 ${R} .volume .slider { flex:1; }
 
-/* Letras */
+/* Lyrics */
 ${R} .lyrics { display:none; flex:1 1 0; max-width:46vw; height:76vh; overflow-y:auto; scrollbar-width:none; position:relative;
   mask-image:linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent); }
 ${R}.show-lyrics .lyrics { display:block; }
@@ -113,7 +113,7 @@ ${R} .lyr-msg { height:100%; display:flex; flex-direction:column; align-items:ce
 ${R} .lyr-msg small { font-size:14px; opacity:.8; }
 ${R} .lyr-src { font-size:12px; color:var(--dim); padding:2vh 0 4vh; }
 
-/* Comentarios de SoundCloud flotando */
+/* Floating SoundCloud comments */
 ${R} .sc-layer { position:absolute; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
 ${R} .sc-bubble { position:absolute; display:flex; gap:10px; align-items:flex-start; max-width:min(380px,40%); padding:9px 14px 9px 9px;
   border-radius:18px; background:rgba(0,0,0,.45); backdrop-filter:blur(10px); box-shadow:0 8px 30px rgba(0,0,0,.35);
@@ -124,7 +124,7 @@ ${R} .sc-bubble span { display:block; font-size:14.5px; line-height:1.3; word-br
 @keyframes npx-bubble { 0% { opacity:0; transform:translateY(14px) scale(.96) } 8% { opacity:1; transform:none }
   80% { opacity:1 } 100% { opacity:0; transform:translateY(-40px) } }
 
-/* Barra superior: volver, reloj, botones */
+/* Top bar: back, clock, buttons */
 ${R} .back { position:absolute; top:16px; left:16px; display:flex; align-items:center; gap:8px; padding:8px 14px 8px 10px; z-index:3;
   border-radius:999px; background:rgba(0,0,0,.35); backdrop-filter:blur(8px); font-size:14px; font-weight:600; transition:opacity .4s; }
 ${R} .back svg { width:20px; height:20px; }
@@ -139,7 +139,7 @@ ${R} .corner .off { opacity:.4; }
 ${R}.idle { cursor:none; }
 ${R}.idle .corner, ${R}.idle:not(.pin-back) .back { opacity:0; }
 
-/* Aviso «A continuación» y avisos */
+/* "Up next" card and toasts */
 ${R} .upnext { position:absolute; left:20px; bottom:20px; z-index:3; display:flex; gap:12px; align-items:center; padding:10px 18px 10px 10px;
   border-radius:14px; background:rgba(0,0,0,.5); backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(0,0,0,.4);
   transform:translateY(130%); opacity:0; transition:transform .5s cubic-bezier(.2,.9,.3,1.2), opacity .4s; max-width:min(420px,60%); }
@@ -154,7 +154,7 @@ ${R} .toast { position:absolute; left:50%; bottom:28px; z-index:4; transform:tra
   transition:opacity .3s, transform .3s; white-space:nowrap; max-width:80%; overflow:hidden; text-overflow:ellipsis; }
 ${R} .toast.show { opacity:1; transform:translate(-50%, 0); }
 
-/* Cola */
+/* Queue */
 ${R} .queue { position:relative; background:rgba(0,0,0,.32); backdrop-filter:blur(14px); border-left:1px solid var(--faint);
   display:flex; flex-direction:column; min-height:0; min-width:0; }
 ${R}.qcollapsed .queue { border-left-color:transparent; }

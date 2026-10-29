@@ -1,4 +1,5 @@
-// Ajustes del plugin: aparecen en Nuclear › Ajustes, en la categoría «Now Playing»
+// Plugin settings, shown in Nuclear › Settings under the "Now Playing" category
+import { t } from './i18n';
 
 const CATEGORY = 'Now Playing';
 
@@ -26,27 +27,27 @@ export const DEFAULTS: Prefs = {
   lyrics: false,
 };
 
-const DEFS = [
-  { id: 'open', title: 'Pantalla de reproducción', description: 'También con F9 o el botón junto al volumen.', kind: 'custom', widgetId: 'open', default: null },
-  { id: 'blur', title: 'Desenfoque del fondo', kind: 'number', default: DEFAULTS.blur,
-    widget: { type: 'slider', min: 0, max: 150, step: 10, unit: 'px', startLabel: 'Nítido', endLabel: 'Muy difuso' } },
-  { id: 'animatedBg', title: 'Fondo animado', description: 'Los colores de la portada se mueven despacio.', kind: 'boolean', default: DEFAULTS.animatedBg },
-  { id: 'visualizer', title: 'Visualizador', kind: 'enum', default: DEFAULTS.visualizer, widget: { type: 'select' },
-    options: [{ value: 'off', label: 'Desactivado' }, { value: 'bars', label: 'Barras' }, { value: 'wave', label: 'Onda' }] },
-  { id: 'clock', title: 'Mostrar reloj', kind: 'boolean', default: DEFAULTS.clock },
-  { id: 'backAlwaysVisible', title: '«Volver» siempre visible', description: 'Si está desactivado, se oculta tras 3 s sin mover el ratón.', kind: 'boolean', default: DEFAULTS.backAlwaysVisible },
-  { id: 'upNext', title: 'Aviso de «A continuación»', description: 'Tarjeta con la siguiente canción en los últimos 10 segundos.', kind: 'boolean', default: DEFAULTS.upNext },
-  { id: 'skipFailed', title: 'Saltar canciones que fallan', description: 'Pasa a la siguiente si una no se puede cargar.', kind: 'boolean', default: DEFAULTS.skipFailed },
-  { id: 'comments', title: 'Comentarios de SoundCloud', description: 'Muestra los comentarios en el segundo en que se escribieron.', kind: 'boolean', default: DEFAULTS.comments },
-  { id: 'lyrics', title: 'Abrir con letras', description: 'Muestra el panel de letras al abrir la pantalla (tecla L).', kind: 'boolean', default: DEFAULTS.lyrics },
-  { id: 'importer', title: 'Importar de Spotify', description: 'Pega enlaces de canciones, listas o álbumes de Spotify.', kind: 'custom', widgetId: 'importer', default: null },
+const definitions = () => [
+  { id: 'open', title: t('setOpen'), description: t('setOpenDesc'), kind: 'custom', widgetId: 'open', default: null },
+  { id: 'blur', title: t('setBlur'), kind: 'number', default: DEFAULTS.blur,
+    widget: { type: 'slider', min: 0, max: 150, step: 10, unit: 'px', startLabel: t('setBlurSharp'), endLabel: t('setBlurSoft') } },
+  { id: 'animatedBg', title: t('setAnimatedBg'), description: t('setAnimatedBgDesc'), kind: 'boolean', default: DEFAULTS.animatedBg },
+  { id: 'visualizer', title: t('setVisualizer'), kind: 'enum', default: DEFAULTS.visualizer, widget: { type: 'select' },
+    options: [{ value: 'off', label: t('setVizOff') }, { value: 'bars', label: t('setVizBars') }, { value: 'wave', label: t('setVizWave') }] },
+  { id: 'clock', title: t('setClock'), kind: 'boolean', default: DEFAULTS.clock },
+  { id: 'backAlwaysVisible', title: t('setBackVisible'), description: t('setBackVisibleDesc'), kind: 'boolean', default: DEFAULTS.backAlwaysVisible },
+  { id: 'upNext', title: t('setUpNext'), description: t('setUpNextDesc'), kind: 'boolean', default: DEFAULTS.upNext },
+  { id: 'skipFailed', title: t('setSkipFailed'), description: t('setSkipFailedDesc'), kind: 'boolean', default: DEFAULTS.skipFailed },
+  { id: 'comments', title: t('setComments'), description: t('setCommentsDesc'), kind: 'boolean', default: DEFAULTS.comments },
+  { id: 'lyrics', title: t('setLyrics'), description: t('setLyricsDesc'), kind: 'boolean', default: DEFAULTS.lyrics },
+  { id: 'importer', title: t('setImporter'), description: t('setImporterDesc'), kind: 'custom', widgetId: 'importer', default: null },
 ];
 
 export async function registerSettings(api: any) {
-  await api.Settings.register(DEFS.map((d) => ({ category: CATEGORY, ...d })));
+  await api.Settings.register(definitions().map((d) => ({ category: CATEGORY, ...d })));
 }
 
-// Lee los ajustes y avisa cada vez que cambie uno. Devuelve la función para dejar de escuchar.
+// Reads the settings and calls onChange whenever one changes. Returns the unsubscribe function.
 export async function watchSettings(api: any, onChange: (prefs: Prefs) => void) {
   const prefs: Prefs = { ...DEFAULTS };
   const keys = Object.keys(DEFAULTS) as (keyof Prefs)[];
@@ -54,7 +55,7 @@ export async function watchSettings(api: any, onChange: (prefs: Prefs) => void) 
     try {
       const v = await api.Settings.get(k);
       if (v !== undefined && v !== null) (prefs as any)[k] = v;
-    } catch { /* noop */ }
+    } catch { /* keep the default */ }
   }));
   onChange({ ...prefs });
   const unsubs = keys.map((k) => api.Settings.subscribe(k, (v: any) => {

@@ -1,5 +1,5 @@
-// Doble clic en una fila de canciones (listas, álbumes, favoritos, búsqueda…) = reproducir ahora.
-// Nuclear solo reproduce al hacer clic en el título; aquí se pulsa ese mismo botón por ti.
+// Double-click a track row (playlists, albums, favorites, search…) to play it now.
+// Nuclear only plays on a click on the title, so this clicks that same button.
 export function setupDoubleClickPlay() {
   const onDblClick = (e: MouseEvent) => {
     const target = e.target as HTMLElement;

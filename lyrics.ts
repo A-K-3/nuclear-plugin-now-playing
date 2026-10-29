@@ -1,10 +1,11 @@
-// Panel de letras: usa los proveedores de letras instalados en Nuclear.
-// Sincronizadas (por línea o por palabra) se resaltan al ritmo de la canción; clic en una línea para saltar a ella.
+// Lyrics panel backed by the lyrics providers installed in Nuclear.
+// Synced lyrics (line or word level) highlight in time with the song; click a line to seek to it.
+import { locale, t } from './i18n';
 import { esc, withTimeout } from './util';
 
 const PRIORITY: Record<string, number> = { wordSynced: 0, lineSynced: 1, plain: 2, instrumental: 3 };
 
-// Último índice cuyo inicio es <= ms (los inicios están ordenados)
+// Last index whose start is <= ms (starts are sorted)
 const lastStarted = (starts: number[], ms: number) => {
   let lo = 0, hi = starts.length - 1, idx = -1;
   while (lo <= hi) {
@@ -22,9 +23,10 @@ export class LyricsPanel {
   private wordStarts: number[] = [];
   private synced = false;
   private current = -1;
-  private sung = -1; // índice de la última palabra marcada como cantada
+  private sung = -1; // index of the last word marked as sung
 
   constructor(private api: any, private el: HTMLElement, onSeek: (seconds: number) => void) {
+    el.lang = locale();
     el.addEventListener('click', (e) => {
       const line = (e.target as HTMLElement).closest('[data-start]') as HTMLElement | null;
       if (line && this.synced) onSeek(+line.dataset.start! / 1000);
@@ -35,22 +37,22 @@ export class LyricsPanel {
     const token = ++this.token;
     this.lines = []; this.lineStarts = []; this.words = []; this.wordStarts = [];
     this.synced = false; this.current = -1; this.sung = -1;
-    if (!track) { this.message('Nada sonando'); return; }
-    this.message('Buscando letra…');
+    if (!track) { this.message(t('nothingPlaying')); return; }
+    this.message(t('searchingLyrics'));
     let results: any[] = [];
     try {
       results = await withTimeout<any[]>(this.api.Lyrics.getLyricsForTrack(track), 15000, () => []);
-    } catch { /* sin proveedor o error: se trata como «sin letra» */ }
+    } catch { /* no provider or provider error: treated as "no lyrics" */ }
     if (token !== this.token) return;
     const best = (results || [])
       .filter((r) => r?.lyrics)
       .sort((a, b) => (PRIORITY[a.lyrics.type] ?? 9) - (PRIORITY[b.lyrics.type] ?? 9))[0];
     if (!best) {
-      this.message('No hay letra para esta canción', 'Nuclear necesita al menos un plugin de letras (Plugins › tienda).');
+      this.message(t('noLyrics'), t('noLyricsHint'));
       return;
     }
     const lyrics = best.lyrics;
-    if (lyrics.type === 'instrumental') { this.message('♪ Instrumental ♪'); return; }
+    if (lyrics.type === 'instrumental') { this.message(t('instrumental')); return; }
     this.synced = lyrics.type === 'lineSynced' || lyrics.type === 'wordSynced';
     const html = (lyrics.sections || []).map((section: any) => {
       const label = section.label ? `<div class="lyr-label">${esc(section.label)}</div>` : '';
@@ -63,7 +65,7 @@ export class LyricsPanel {
       return label + lines;
     }).join('');
     this.el.innerHTML = `<div class="lyr-pad"></div>${html}<div class="lyr-pad"></div>
-      <div class="lyr-src">Letra: ${esc(best.providerName || best.providerId)}</div>`;
+      <div class="lyr-src">${esc(t('lyricsSource', { provider: best.providerName || best.providerId }))}</div>`;
     this.el.classList.toggle('synced', this.synced);
     this.lines = Array.from(this.el.querySelectorAll<HTMLElement>('.lyr-line'));
     this.lineStarts = this.lines.map((l) => +(l.dataset.start ?? Infinity));
@@ -72,7 +74,7 @@ export class LyricsPanel {
     this.el.scrollTop = 0;
   }
 
-  // Llamar en cada fotograma: solo toca las líneas y palabras que cambian de estado
+  // Call every frame: only touches the lines and words whose state changes
   update(positionSeconds: number) {
     if (!this.synced || !this.lines.length) return;
     const ms = positionSeconds * 1000;

@@ -1,4 +1,4 @@
-// Utilidades compartidas por los módulos del plugin
+// Helpers shared by the plugin modules
 
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
@@ -16,7 +16,7 @@ export const fmtLong = (s: number) => {
 export const norm = (s: string) =>
   String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[’']/g, "'").replace(/[^a-z0-9]+/g, '');
 
-// "beansclub - crossroad" subido por un sello → título "crossroad", artista "beansclub"
+// "beansclub - crossroad" uploaded by a label → title "crossroad", artist "beansclub"
 const VERSION = /^(instrumental|remix|edit|mix|vip|extended|live|demo|radio edit|sped up|slowed)\b/i;
 export function display(track: any) {
   let title = track?.title || '';
@@ -36,7 +36,7 @@ export function art(track: any, big: boolean): string {
   return (small.length ? small : items).reduce((a: any, b: any) => (w(b) < w(a) ? b : a)).url;
 }
 
-// Portada de repuesto: degradado con un color derivado del título y sus iniciales
+// Fallback artwork: a gradient with a hue derived from the title, plus its initials
 export function fallbackCover(title: string, artist: string): string {
   let h = 0;
   for (const ch of `${title}|${artist}`) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -51,7 +51,7 @@ export function fallbackCover(title: string, artist: string): string {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgText);
 }
 
-// Color dominante (ignora casi-blancos, casi-negros y grises). null si el canvas está bloqueado por CORS
+// Dominant color (ignores near-white, near-black and greys). null when the canvas is CORS-tainted
 export function accentFrom(img: HTMLImageElement) {
   try {
     const c = document.createElement('canvas'), n = 24;
@@ -88,11 +88,11 @@ export const loadImage = (src: string, cors: boolean, timeoutMs = 5000) =>
     im.src = src;
   });
 
-// api.Http.fetch devuelve el cuerpo como texto (sirve para JSON/HTML, no para imágenes)
-// y no tiene tiempo límite: se lo ponemos aquí.
+// api.Http.fetch returns the body as text (fine for JSON/HTML, not for images)
+// and has no timeout of its own: one is added here.
 export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-// Límite de tiempo para una promesa; onTimeout devuelve el valor de reserva o lanza. Limpia su temporizador.
+// Timeout for a promise; onTimeout returns a fallback value or throws. Clears its timer.
 export function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => T): Promise<T> {
   let timer = 0;
   const expiry = new Promise<T>((resolve, reject) => {
@@ -101,12 +101,12 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () =>
   return Promise.race([promise, expiry]).finally(() => clearTimeout(timer));
 }
 
-// Estilo de los botones de los widgets de Ajustes
+// Button style for the settings widgets
 export const BUTTON_STYLE = {
   padding: '6px 14px', borderRadius: 8, border: '1px solid currentColor', background: 'transparent', color: 'inherit', cursor: 'pointer',
 };
 
-// User-Agent: Spotify solo incluye los metadatos (og:*) en el HTML con un agente simple.
+// User-Agent: Spotify only includes the og:* metadata in the HTML for a simple agent.
 export const UA_SIMPLE = 'Mozilla/5.0';
 const UA_BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36';
 
@@ -120,7 +120,7 @@ export async function httpText(api: any, url: string, timeoutMs = 12000, userAge
 
 export const httpJson = async (api: any, url: string, timeoutMs?: number) => JSON.parse(await httpText(api, url, timeoutMs));
 
-// Ejecuta tareas con un máximo de N a la vez, conservando el orden de los resultados
+// Runs tasks at most N at a time, keeping results in order
 export async function pool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -139,6 +139,6 @@ export const storage = {
     try { const v = localStorage.getItem(key); return v ? { ...fallback, ...JSON.parse(v) } : fallback; } catch { return fallback; }
   },
   set(key: string, value: unknown) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* noop */ }
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
   },
 };
