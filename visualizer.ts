@@ -33,6 +33,7 @@ const KICK_MIN_RANGE = 0.04;
 const KICK_FLOOR = 0.3; // fraction of a strong hit ignored, so small bumps do not count
 const KICK_DECAY = 0.86;
 const SETTLE_EPSILON = 1e-3;
+const MOVE_EPSILON = 5e-4; // per-frame change below which a bar counts as still
 
 export class Visualizer {
   private mode: VisualizerMode = 'bars';
@@ -56,10 +57,9 @@ export class Visualizer {
   private height = 0;
   private bins = { rate: 0, edges: [] as number[], bassFrom: 1, bassTo: 2 };
   private gradient: CanvasGradient | null = null;
-  private gradientKey = '';
-  // Wave mode: per-point heights and x positions, reused every frame
+  private gradientFor = { mode: '', color: '', h: 0 };
+  // Wave mode: per-point heights, reused every frame
   private waveLevels = new Float32Array(BARS * 2 - 1);
-  private waveXs = new Float32Array(BARS * 2 - 1);
   private settled = false;
   private lastColor = '';
   private resize: ResizeObserver;
@@ -142,7 +142,7 @@ export class Visualizer {
     const dpr = window.devicePixelRatio || 1;
 
     // Both modes draw the same smoothed, auto-gained spectrum: as bars, or as a smooth curve
-    const moving = this.updateBars(live);
+    const moving = this.updateSpectrum(live);
     this.settled = !moving && (!playing || this.opacity === 0);
     if (this.mode === 'bars') {
       const gap = 3 * dpr, bw = (w - gap * (BARS - 1)) / BARS;
@@ -154,27 +154,30 @@ export class Visualizer {
         g.fill();
       }
     } else {
-      this.waveShape(w, h * 0.46);
+      this.waveShape(h * 0.46);
       const mid = h / 2;
       g.beginPath();
-      g.moveTo(0, mid - this.waveLevels[0]);
-      this.traceWave(mid, -1, false);
-      this.traceWave(mid, 1, true);
+      this.traceWave(w, mid, -1, false);
+      this.traceWave(w, mid, 1, true);
       g.closePath();
       g.fillStyle = this.fillGradient(color, h);
       g.fill();
-      // Glowing outline on both edges
-      g.lineWidth = 2 * dpr;
+      // Glowing outline on both edges: a wide faint stroke under a thin one (much cheaper than shadowBlur)
       g.strokeStyle = color;
-      g.shadowColor = color; g.shadowBlur = 10 * dpr;
+      g.lineJoin = 'round';
+      g.globalAlpha = this.opacity * 0.25;
+      g.lineWidth = 7 * dpr;
       g.stroke();
-      g.shadowBlur = 0;
+      g.globalAlpha = this.opacity;
+      g.lineWidth = 2 * dpr;
+      g.stroke();
     }
     g.globalAlpha = 1;
   }
 
-  // Spectrum into BARS smoothed levels (0–1), scaled against the recent peak. Returns whether still moving.
-  private updateBars(live: boolean) {
+  // Spectrum into BARS smoothed levels (0–1), scaled against the recent peak, for both modes.
+  // Returns whether the levels are still moving.
+  private updateSpectrum(live: boolean) {
     const { edges } = this.bands();
     // Pass 1: raw band levels and the frame peak; pass 2: normalise against the decaying peak
     let frameMax = 0;
@@ -189,7 +192,7 @@ export class Visualizer {
     for (let i = 0; i < BARS; i++) {
       const v = live ? Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, MIN_PEAK)), GAIN_CURVE) * HEADROOM : 0;
       const delta = (v - this.smooth[i]) * (v > this.smooth[i] ? 0.5 : 0.12);
-      if (Math.abs(delta) > 0.0005) moving = true;
+      if (Math.abs(delta) > MOVE_EPSILON) moving = true;
       this.smooth[i] += delta;
     }
     return moving;
@@ -197,26 +200,24 @@ export class Visualizer {
 
   // Wave heights: bass at both edges (beside the controls, where it stays visible) and treble in the
   // middle, with a light blur across neighbouring bands to soften the lobes
-  private waveShape(w: number, amp: number) {
+  private waveShape(amp: number) {
     const n = this.waveLevels.length;
     const band = (k: number) => this.smooth[BARS - 1 - Math.abs(clamp(k, 0, n - 1) - (BARS - 1))];
-    for (let k = 0; k < n; k++) {
-      this.waveLevels[k] = Math.max(0.015, (band(k - 1) + 2 * band(k) + band(k + 1)) / 4) * amp;
-      this.waveXs[k] = (k / (n - 1)) * w;
-    }
+    for (let k = 0; k < n; k++) this.waveLevels[k] = Math.max(0.015, (band(k - 1) + 2 * band(k) + band(k + 1)) / 4) * amp;
   }
 
-  // One edge of the wave, mirrored around `mid` (sign -1 is the top edge), as quadratic segments through the midpoints
-  private traceWave(mid: number, sign: number, reverse: boolean) {
-    const { g, waveLevels: lv, waveXs: xs } = this, n = lv.length;
-    const first = reverse ? n - 1 : 0;
-    g.lineTo(xs[first], mid + sign * lv[first]);
+  // One edge of the wave, mirrored around `mid` (sign -1 is the top edge), as quadratic segments
+  // through the midpoints. The first call starts the path; the second continues it backwards.
+  private traceWave(w: number, mid: number, sign: number, reverse: boolean) {
+    const { g, waveLevels: lv } = this, n = lv.length;
+    const at = (s: number) => (reverse ? n - 1 - s : s);
+    const x = (k: number) => (k / (n - 1)) * w, y = (k: number) => mid + sign * lv[k];
+    g.lineTo(x(at(0)), y(at(0)));
     for (let s = 1; s < n - 1; s++) {
-      const k = reverse ? n - 1 - s : s, next = reverse ? k - 1 : k + 1;
-      g.quadraticCurveTo(xs[k], mid + sign * lv[k], (xs[k] + xs[next]) / 2, mid + sign * (lv[k] + lv[next]) / 2);
+      const k = at(s), next = at(s + 1);
+      g.quadraticCurveTo(x(k), y(k), (x(k) + x(next)) / 2, (y(k) + y(next)) / 2);
     }
-    const last = reverse ? 0 : n - 1;
-    g.lineTo(xs[last], mid + sign * lv[last]);
+    g.lineTo(x(at(n - 1)), y(at(n - 1)));
   }
 
   // Bass energy drives `level`; jumps above its running average drive `pulse`
@@ -321,8 +322,8 @@ export class Visualizer {
 
   // Bars fade upwards from the accent; the wave fades from its centre line to both edges
   private fillGradient(color: string, h: number) {
-    const key = `${this.mode}|${color}|${h}`;
-    if (key !== this.gradientKey || !this.gradient) {
+    const f = this.gradientFor;
+    if (!this.gradient || f.mode !== this.mode || f.color !== color || f.h !== h) {
       const clear = 'rgba(255,255,255,0)';
       if (this.mode === 'bars') {
         this.gradient = this.g.createLinearGradient(0, h, 0, 0);
@@ -334,7 +335,7 @@ export class Visualizer {
         this.gradient.addColorStop(0.5, color);
         this.gradient.addColorStop(1, clear);
       }
-      this.gradientKey = key;
+      this.gradientFor = { mode: this.mode, color, h };
     }
     return this.gradient;
   }

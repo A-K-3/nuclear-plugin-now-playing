@@ -15,8 +15,9 @@ const SPAWN_GAP_MS = 900;
 // A comment is dropped once it is this far behind the music
 const MAX_LATE_MS = 5000;
 const MAX_WAITING = 6;
-// Free space kept around each bubble and around the screen's own content, in pixels
+// Free space kept around each bubble, and between bubbles and the window edges, in pixels
 const SPACING = 12;
+const EDGE_PX = 16;
 const PLACEMENT_TRIES = 60;
 // Widest bubble, and the narrowest side strip worth keeping the artwork and title clear for
 const MAX_WIDTH_PX = 380;
@@ -38,13 +39,19 @@ export class SoundCloudComments {
   private clientId = storage.get('npx-sc', { clientId: '' }).clientId;
   private waiting: Comment[] = [];
   private lastSpawn = 0;
-  // Space taken by the bubbles on screen (including their upward path) and when each one leaves
+  // Space taken by the bubbles on screen (including their upward path), oldest first, and when each one leaves
   private taken: (Box & { until: number })[] = [];
+  // The next bubble, built and measured once and kept (hidden) until it finds a spot
+  private next: { c: Comment; el: HTMLElement } | null = null;
 
   // `avoid.never`: parts bubbles must never cover (controls, buttons…). `avoid.ifRoom`: parts they keep
   // clear of while there is space elsewhere (artwork, title); on small windows they may go over them.
   constructor(private api: any, private layer: HTMLElement, private markers: HTMLElement,
-    private avoid: { never: HTMLElement[]; ifRoom: HTMLElement[] }, private onStatus: (text: string) => void) {}
+    private avoid: { never: HTMLElement[]; ifRoom: HTMLElement[] }, private onStatus: (text: string) => void) {
+    // Shared by every bubble (see .sc-bubble in styles.ts)
+    layer.style.setProperty('--life', `${BUBBLE_MS}ms`);
+    layer.style.setProperty('--drift', `-${DRIFT_PX}px`);
+  }
 
   setEnabled(on: boolean) {
     this.enabled = on;
@@ -58,6 +65,7 @@ export class SoundCloudComments {
   clear() {
     this.waiting = [];
     this.taken = [];
+    this.next = null;
     this.layer.innerHTML = '';
   }
 
@@ -97,75 +105,77 @@ export class SoundCloudComments {
     }
     this.lastMs = ms;
     if (!playing) return;
-    while (this.ptr < this.comments.length && this.comments[this.ptr].ts <= ms) {
-      const c = this.comments[this.ptr++];
-      if (ms - c.ts < MAX_LATE_MS) this.waiting.push(c);
-    }
-    if (!this.waiting.length) return;
+    while (this.ptr < this.comments.length && this.comments[this.ptr].ts <= ms) this.waiting.push(this.comments[this.ptr++]);
     if (this.waiting.length > MAX_WAITING) this.waiting.splice(0, this.waiting.length - MAX_WAITING);
     while (this.waiting.length && ms - this.waiting[0].ts >= MAX_LATE_MS) this.waiting.shift();
+    if (this.next && this.next.c !== this.waiting[0]) { this.next.el.remove(); this.next = null; }
     const now = performance.now();
     if (!this.waiting.length || now - this.lastSpawn < SPAWN_GAP_MS) return;
-    this.taken = this.taken.filter((b) => b.until > now);
+    while (this.taken.length && this.taken[0].until <= now) this.taken.shift();
     if (this.taken.length >= MAX_BUBBLES) return;
     // Whether it fits or not, wait for the next slot before trying again
     this.lastSpawn = now;
     if (this.spawn(this.waiting[0], now)) this.waiting.shift();
   }
 
-  // Shows a bubble in a free spot; returns false (and shows nothing) when there is no room yet
+  // Shows a bubble in a free spot; returns false (and keeps it hidden for the next try) when there is no room yet
   private spawn(c: Comment, now: number) {
-    const el = document.createElement('div');
-    el.className = 'sc-bubble';
-    el.style.visibility = 'hidden';
-    el.style.animationDuration = `${BUBBLE_MS}ms`;
-    el.style.setProperty('--drift', `-${DRIFT_PX}px`);
-    // Each bubble starts its sway at a different point so they do not move in step
-    el.innerHTML = `<div class="sc-sway" style="animation-delay:-${Math.round(Math.random() * 3000)}ms">` +
-      `${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : ''}<div><b>${esc(c.user)}</b><span>${esc(c.body)}</span></div></div>`;
-    this.layer.appendChild(el);
+    if (this.next?.c !== c) {
+      this.next?.el.remove();
+      const el = document.createElement('div');
+      el.className = 'sc-bubble';
+      el.style.visibility = 'hidden';
+      // Each bubble starts its sway at a different point so they do not move in step
+      el.innerHTML = `<div class="sc-sway" style="animation-delay:-${Math.round(Math.random() * 3000)}ms">` +
+        `${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : ''}<div><b>${esc(c.user)}</b><span>${esc(c.body)}</span></div></div>`;
+      this.layer.appendChild(el);
+      this.next = { c, el };
+    }
+    const { el } = this.next;
     // Narrow enough to fit beside the artwork and title; only when there is no such room (small
     // windows) may it go over them. With room but no free spot right now, it waits its turn.
-    const side = this.sideRoom();
-    let spot: Box | null;
-    if (side >= MIN_SIDE_PX) {
-      el.style.maxWidth = `${Math.min(MAX_WIDTH_PX, side)}px`;
-      spot = this.findSpot(el.offsetWidth, el.offsetHeight, true);
-    } else {
-      spot = this.findSpot(el.offsetWidth, el.offsetHeight, false);
-    }
-    if (!spot) { el.remove(); return false; }
+    const area = this.layer.getBoundingClientRect();
+    const ifRoom = this.boxes(this.avoid.ifRoom, area);
+    const side = this.sideRoom(ifRoom, area);
+    const keepClear = side >= MIN_SIDE_PX;
+    el.style.maxWidth = keepClear ? `${Math.min(MAX_WIDTH_PX, side)}px` : '';
+    const blocked = [...this.boxes(this.avoid.never, area), ...(keepClear ? ifRoom : []), ...this.taken];
+    const spot = this.findSpot(el.offsetWidth, el.offsetHeight, area, blocked);
+    if (!spot) return false;
     el.style.left = `${spot.x}px`;
     el.style.top = `${spot.y + DRIFT_PX}px`;
+    // Restart its animation, which has been running while it waited hidden
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
     el.style.visibility = '';
+    this.next = null;
     this.taken.push({ ...spot, until: now + BUBBLE_MS });
     setTimeout(() => el.remove(), BUBBLE_MS);
     return true;
   }
 
-  // Width of the widest free strip to the left or right of the artwork and title
-  private sideRoom() {
-    const area = this.layer.getBoundingClientRect();
-    const rects = this.avoid.ifRoom.map((e) => e.getBoundingClientRect()).filter((r) => r.width && r.height);
-    if (!rects.length) return area.width;
-    const left = Math.min(...rects.map((r) => r.left)) - area.left;
-    const right = area.right - Math.max(...rects.map((r) => r.right));
-    return Math.max(left, right) - 16 - SPACING;
+  // Visible elements as boxes relative to the layer
+  private boxes(els: HTMLElement[], area: DOMRect): Box[] {
+    return els.map((e) => e.getBoundingClientRect()).filter((r) => r.width && r.height)
+      .map((r) => ({ x: r.left - area.left, y: r.top - area.top, w: r.width, h: r.height }));
   }
 
-  // Random spot whose whole upward path touches neither another bubble nor the screen's content
-  private findSpot(w: number, h: number, keepClear: boolean): Box | null {
-    const area = this.layer.getBoundingClientRect();
-    const blocked: Box[] = (keepClear ? [...this.avoid.never, ...this.avoid.ifRoom] : this.avoid.never)
-      .map((e) => e.getBoundingClientRect())
-      .filter((r) => r.width && r.height)
-      .map((r) => ({ x: r.left - area.left, y: r.top - area.top, w: r.width, h: r.height }));
-    blocked.push(...this.taken);
+  // Width of the widest free strip to the left or right of the given boxes (artwork and title)
+  private sideRoom(boxes: Box[], area: DOMRect) {
+    if (!boxes.length) return area.width;
+    const left = Math.min(...boxes.map((b) => b.x));
+    const right = area.width - Math.max(...boxes.map((b) => b.x + b.w));
+    return Math.max(left, right) - EDGE_PX - SPACING;
+  }
+
+  // Random spot whose whole upward path touches none of the blocked boxes
+  private findSpot(w: number, h: number, area: DOMRect, blocked: Box[]): Box | null {
     const path = h + DRIFT_PX;
-    const maxX = area.width - w - 16, maxY = area.height - path - 16;
-    if (maxX < 16 || maxY < 16) return null;
+    const maxX = area.width - w - EDGE_PX, maxY = area.height - path - EDGE_PX;
+    if (maxX < EDGE_PX || maxY < EDGE_PX) return null;
     for (let i = 0; i < PLACEMENT_TRIES; i++) {
-      const box = { x: 16 + Math.random() * (maxX - 16), y: 16 + Math.random() * (maxY - 16), w, h: path };
+      const box = { x: EDGE_PX + Math.random() * (maxX - EDGE_PX), y: EDGE_PX + Math.random() * (maxY - EDGE_PX), w, h: path };
       if (!blocked.some((b) => overlaps(box, b))) return box;
     }
     return null;
