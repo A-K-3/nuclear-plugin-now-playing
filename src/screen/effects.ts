@@ -5,12 +5,15 @@
 // - beat: the artwork breathes with the bass, its glow and a light flash follow the kicks
 // - the artwork flips in when the track changes
 // Everything is driven through transform/opacity so it stays on the compositor,
-// and a style is only written when its value actually changes.
+// and a style is only written when its value actually changes. Rates are per 60 fps frame and
+// converted to the real time step, so the motion has the same speed at any refresh rate.
+import { ease } from '../lib/math';
+import { PERSPECTIVE } from './styles/artwork';
+import { restartAnimation } from './template';
 
-const PERSPECTIVE = 1200; // px, keep in sync with .cover-wrap in styles.ts
 const TILT_X = 6; // degrees for full vertical travel
 const TILT_Y = 8; // degrees for full horizontal travel
-const EASE = 0.06; // fraction of the remaining distance covered per frame
+const EASE = 0.06; // fraction of the remaining distance covered per 60 fps frame
 const IDLE_DRIFT = { x: 0.35, y: 0.25, speedX: 0.35, speedY: 0.27 };
 const SHINE_SHIFT = 22; // % the shine travels opposite to the tilt
 const BACKDROP_SHIFT = 1.2; // % the background drifts
@@ -49,8 +52,8 @@ export class Effects {
     this.target.y = y;
   }
 
-  // Call every frame, after the visualizer has updated the levels
-  update(now: number, idle: boolean) {
+  // Call every frame, after the analyser has updated the levels
+  update(now: number, dt: number, idle: boolean) {
     if (!this.enabled) return;
     let tx = this.target.x, ty = this.target.y;
     if (idle) {
@@ -59,8 +62,9 @@ export class Effects {
       ty = Math.sin(t * IDLE_DRIFT.speedY + 1) * IDLE_DRIFT.y;
     }
     const c = this.current;
-    c.x += (tx - c.x) * EASE;
-    c.y += (ty - c.y) * EASE;
+    const k = ease(EASE, dt);
+    c.x += (tx - c.x) * k;
+    c.y += (ty - c.y) * k;
     const { level, pulse } = this.levels;
     const { wrap, glow, shine, flash, backdrop, info } = this.el;
 
@@ -82,10 +86,7 @@ export class Effects {
   // 3D flip-in of the artwork on track change
   flip() {
     if (!this.enabled) return;
-    const { cover } = this.el;
-    cover.classList.remove('flip');
-    void cover.offsetWidth; // restart the animation
-    cover.classList.add('flip');
+    restartAnimation(this.el.cover, 'flip');
   }
 
   private set(target: HTMLElement, key: StyleKey, value: string) {

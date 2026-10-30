@@ -3,11 +3,13 @@
 // the sound stops but Nuclear still believes it is playing, and every UI keeps the "pause" icon.
 // Routing the actions to Nuclear's playback API keeps its state (and this plugin's screen) in sync.
 // It also publishes title, artist and artwork to the OS media overlay.
-import { art, display } from './util';
+import type { NuclearPluginAPI, QueueItem } from '@nuclearplayer/plugin-sdk';
+
+import { art, display } from '../lib/track';
 
 const ACTIONS = ['play', 'pause', 'nexttrack', 'previoustrack', 'seekto', 'stop'] as const;
 
-export function setupMediaSession(api: any) {
+export function setupMediaSession(api: NuclearPluginAPI) {
   const session = navigator.mediaSession;
   if (!session) return () => {};
 
@@ -24,7 +26,7 @@ export function setupMediaSession(api: any) {
   }
 
   let lastId: string | null = null;
-  const showTrack = (item: any) => {
+  const showTrack = (item: QueueItem | undefined) => {
     if ((item?.id ?? null) === lastId) return;
     lastId = item?.id ?? null;
     const track = item?.track;
@@ -36,16 +38,16 @@ export function setupMediaSession(api: any) {
       artwork: cover ? [{ src: cover }] : [],
     });
   };
-  // subscribeToCurrentItem is the precise hook; fall back to the whole queue on hosts without it
-  const unsubQueue = api.Queue.subscribeToCurrentItem
+  // subscribeToCurrentItem is the precise hook; older hosts only have the whole-queue subscription
+  const unsubQueue = typeof api.Queue.subscribeToCurrentItem === 'function'
     ? api.Queue.subscribeToCurrentItem(showTrack)
-    : api.Queue.subscribe((queue: any) => showTrack(queue.items?.[queue.currentIndex]));
+    : api.Queue.subscribe((queue) => showTrack(queue.items[queue.currentIndex]));
   api.Queue.getCurrentItem().then(showTrack).catch(() => {});
 
   let lastState = '';
-  const unsubPlayback = api.Playback.subscribe((s: any) => {
-    const state = s.status === 'playing' ? 'playing' : s.status === 'paused' ? 'paused' : 'none';
-    if (state !== lastState) session.playbackState = (lastState = state) as MediaSessionPlaybackState;
+  const unsubPlayback = api.Playback.subscribe((s) => {
+    const state: MediaSessionPlaybackState = s.status === 'playing' ? 'playing' : s.status === 'paused' ? 'paused' : 'none';
+    if (state !== lastState) session.playbackState = lastState = state;
   });
 
   return () => {

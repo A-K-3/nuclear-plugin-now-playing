@@ -1,5 +1,6 @@
 // Interface strings in English and Spanish. The language follows Nuclear's own setting
 // (core.general.language): Spanish when it is Spanish, English otherwise.
+import type { NuclearPluginAPI } from '@nuclearplayer/plugin-sdk';
 
 const en = {
   // Screen
@@ -74,7 +75,7 @@ const en = {
   setCommentsDesc: 'Shows comments at the second they were written.',
 };
 
-type Key = keyof typeof en;
+export type Key = keyof typeof en;
 
 const es: Record<Key, string> = {
   back: 'Volver',
@@ -147,7 +148,7 @@ const es: Record<Key, string> = {
 let strings: Record<Key, string> = en;
 let localeTag = 'en-US';
 
-export async function initLanguage(api: any) {
+export async function initLanguage(api: NuclearPluginAPI) {
   let language: unknown;
   try { language = await api.Settings.getGlobal('core.general.language'); } catch { /* use the browser's */ }
   const spanish = String(language || navigator.language || '').toLowerCase().startsWith('es');

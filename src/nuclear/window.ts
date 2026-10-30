@@ -2,11 +2,15 @@
 // Plugins cannot import @tauri-apps/api, so this calls the same window commands Nuclear's own
 // title bar uses (start_dragging, minimize, toggle_maximize, close), which its capabilities allow.
 
-const tauri = (window as any).__TAURI_INTERNALS__;
-const label: string = tauri?.metadata?.currentWindow?.label ?? 'main';
+type TauriInternals = {
+  invoke(command: string, args: Record<string, unknown>): Promise<unknown>;
+  metadata?: { currentWindow?: { label?: string } };
+};
 
-const call = (command: string) =>
-  Promise.resolve(tauri?.invoke(`plugin:window|${command}`, { label })).catch(() => {});
+const tauri = (window as unknown as { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__;
+const label = tauri?.metadata?.currentWindow?.label ?? 'main';
+
+const call = (command: string) => Promise.resolve(tauri?.invoke(`plugin:window|${command}`, { label })).catch(() => {});
 
 export const appWindow = {
   available: !!tauri,
