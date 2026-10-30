@@ -13,7 +13,9 @@ import { setupAutoSkip } from './nuclear/auto-skip';
 import { setupDoubleClickPlay } from './nuclear/double-click';
 import { setupMediaSession } from './nuclear/media-session';
 import { setupPlayerButton } from './nuclear/player-button';
-import { createScreen, type Screen } from './screen';
+// Folder imports must name index explicitly: Nuclear's loader resolves the imports inside a folder's
+// index one level too high (see scripts/build.mjs)
+import { createScreen, type Screen } from './screen/index';
 import { registerSettings, watchSettings } from './settings';
 
 // Style of the "Open screen" button in Nuclear › Settings › Now Playing

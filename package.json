@@ -1,6 +1,6 @@
 {
   "name": "nuclear-plugin-now-playing",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Fullscreen now-playing screen for Nuclear: big artwork, synced lyrics, SoundCloud timed comments, visualizer and a searchable queue",
   "author": "A-K-3",
   "license": "MIT",
@@ -14,7 +14,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "esbuild src/index.ts --bundle --format=cjs --platform=browser --target=es2022 --external:react --external:@nuclearplayer/plugin-sdk --outfile=dist/plugin.js",
+    "build": "node scripts/build.mjs src/index.ts dist/plugin.js",
     "test": "npm run build && playwright test",
     "check": "npm run typecheck && npm test",
     "pack": "bash scripts/pack.sh"

@@ -23,7 +23,7 @@ import { LyricsPanel } from './lyrics';
 import { createQuickSettings } from './quick-settings';
 import { QueuePanel } from './queue';
 import { PlayerState } from './state';
-import { CSS, ROOT_ID } from './styles';
+import { CSS, ROOT_ID } from './styles/index';
 import { queryIn, restartAnimation, setOn, template } from './template';
 import { UpNext } from './up-next';
 import { SpectrumView } from './visualizer';
