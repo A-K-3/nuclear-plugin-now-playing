@@ -144,3 +144,13 @@ test("batches Nuclear's queue saves and leaves other Tauri calls alone", async (
   })).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('the queue search finds titles in any script', async ({ page }) => {
+  const errors = await start(page);
+  await page.keyboard.press('F9');
+  await page.keyboard.press('/');
+  await page.locator('#npx-root .qsearch input').fill('сломана');
+  await expect(page.locator('#npx-root .list li:not(.hidden)')).toHaveCount(1);
+  await expect(page.locator('#npx-root .list li:not(.hidden) .t b')).toContainText('Сломана');
+  expect(errors).toEqual([]);
+});
