@@ -1,9 +1,11 @@
 // Quick settings panel inside the screen (gear button). Every control writes the plugin setting
 // through api.Settings, so it stays in sync with Nuclear › Settings › Now Playing; the screen applies
 // the change when the settings subscription fires, and calls update() to refresh the controls.
-import { t } from './i18n';
-import { esc } from './util';
-import type { Prefs } from './settings';
+import type { NuclearPluginAPI } from '@nuclearplayer/plugin-sdk';
+
+import { t } from '../i18n';
+import { esc } from '../lib/format';
+import type { Prefs } from '../settings';
 
 type ToggleKey = 'effects' | 'animatedBg' | 'clock' | 'comments';
 
@@ -17,7 +19,7 @@ const VISUALIZER: Array<[Prefs['visualizer'], Parameters<typeof t>[0]]> = [
   ['off', 'setVizOff'], ['bars', 'setVizBars'], ['wave', 'setVizWave'],
 ];
 
-export function createQuickSettings(panel: HTMLElement, api: any, onBlurPreview: (px: number) => void) {
+export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, onBlurPreview: (px: number) => void) {
   panel.innerHTML = `
     <h3>${esc(t('settings'))}</h3>
     ${TOGGLES.map(([key, label]) => `
@@ -34,8 +36,8 @@ export function createQuickSettings(panel: HTMLElement, api: any, onBlurPreview:
     const target = e.target as HTMLElement;
     const toggle = target.closest<HTMLElement>('[data-set]');
     const viz = target.closest<HTMLElement>('[data-viz]');
-    if (toggle && prefs) api.Settings.set(toggle.dataset.set, !prefs[toggle.dataset.set as ToggleKey]);
-    else if (viz) api.Settings.set('visualizer', viz.dataset.viz);
+    if (toggle && prefs) api.Settings.set(toggle.dataset.set!, !prefs[toggle.dataset.set as ToggleKey]);
+    else if (viz) api.Settings.set('visualizer', viz.dataset.viz!);
   });
   // Live preview while dragging; persist once released
   range.addEventListener('input', () => {

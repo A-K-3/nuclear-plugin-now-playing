@@ -2,3 +2,7 @@ node_modules/
 plugin.zip
 *.log
 nuclear-logs-*.txt
+dist/
+test-results/
+playwright-report/
+.idea/

@@ -1,9 +1,17 @@
 // Lyrics panel backed by the lyrics providers installed in Nuclear.
 // Synced lyrics (line or word level) highlight in time with the song; click a line to seek to it.
-import { locale, t } from './i18n';
-import { esc, withTimeout } from './util';
+import type { AttributedLyrics, NuclearPluginAPI, Track } from '@nuclearplayer/plugin-sdk';
 
-const PRIORITY: Record<string, number> = { wordSynced: 0, lineSynced: 1, plain: 2, instrumental: 3 };
+import { locale, t } from '../i18n';
+import { esc } from '../lib/format';
+import { withTimeout } from '../lib/http';
+
+const PRIORITY: Record<AttributedLyrics['lyrics']['type'], number> = { wordSynced: 0, lineSynced: 1, plain: 2, instrumental: 3 };
+const TIMEOUT_MS = 15000;
+
+// Plain, line-synced and word-synced lyrics share this shape; the timings exist only when synced
+type Line = { segments: Array<{ text: string; startMs?: number }>; startMs?: number; endMs?: number };
+type Section = { label?: string; lines: Line[] };
 
 // Last index whose start is <= ms (starts are sorted)
 const lastStarted = (starts: number[], ms: number) => {
@@ -25,28 +33,28 @@ export class LyricsPanel {
   private current = -1;
   private sung = -1; // index of the last word marked as sung
 
-  constructor(private api: any, private el: HTMLElement, onSeek: (seconds: number) => void) {
+  constructor(private api: NuclearPluginAPI, private el: HTMLElement, onSeek: (seconds: number) => void) {
     el.lang = locale();
     el.addEventListener('click', (e) => {
-      const line = (e.target as HTMLElement).closest('[data-start]') as HTMLElement | null;
+      const line = (e.target as HTMLElement).closest<HTMLElement>('[data-start]');
       if (line && this.synced) onSeek(+line.dataset.start! / 1000);
     });
   }
 
-  async load(track: any) {
+  async load(track: Track | undefined) {
     const token = ++this.token;
     this.lines = []; this.lineStarts = []; this.words = []; this.wordStarts = [];
     this.synced = false; this.current = -1; this.sung = -1;
     if (!track) { this.message(t('nothingPlaying')); return; }
     this.message(t('searchingLyrics'));
-    let results: any[] = [];
+    let results: AttributedLyrics[] = [];
     try {
-      results = await withTimeout<any[]>(this.api.Lyrics.getLyricsForTrack(track), 15000, () => []);
+      results = await withTimeout(this.api.Lyrics.getLyricsForTrack(track), TIMEOUT_MS, () => []);
     } catch { /* no provider or provider error: treated as "no lyrics" */ }
     if (token !== this.token) return;
     const best = (results || [])
       .filter((r) => r?.lyrics)
-      .sort((a, b) => (PRIORITY[a.lyrics.type] ?? 9) - (PRIORITY[b.lyrics.type] ?? 9))[0];
+      .sort((a, b) => PRIORITY[a.lyrics.type] - PRIORITY[b.lyrics.type])[0];
     if (!best) {
       this.message(t('noLyrics'), t('noLyricsHint'));
       return;
@@ -54,10 +62,11 @@ export class LyricsPanel {
     const lyrics = best.lyrics;
     if (lyrics.type === 'instrumental') { this.message(t('instrumental')); return; }
     this.synced = lyrics.type === 'lineSynced' || lyrics.type === 'wordSynced';
-    const html = (lyrics.sections || []).map((section: any) => {
+    const sections = (lyrics.sections || []) as Section[];
+    const html = sections.map((section) => {
       const label = section.label ? `<div class="lyr-label">${esc(section.label)}</div>` : '';
-      const lines = (section.lines || []).map((line: any) => {
-        const segs = (line.segments || []).map((s: any) =>
+      const lines = (section.lines || []).map((line) => {
+        const segs = (line.segments || []).map((s) =>
           lyrics.type === 'wordSynced' ? `<span class="w" data-ws="${s.startMs}">${esc(s.text)}</span>` : esc(s.text)).join('');
         const timing = this.synced ? ` data-start="${line.startMs}" data-end="${line.endMs}"` : '';
         return `<div class="lyr-line"${timing}>${segs || '&nbsp;'}</div>`;

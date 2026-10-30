@@ -1,10 +1,12 @@
-// SoundCloud timed comments: they float on screen at the exact second they were written,
-// with markers on the timeline. Works even when the song does not stream from SoundCloud:
-// it is looked up there and only accepted when the title matches plus the artist or duration.
-import { t } from './i18n';
-import { esc, httpJson, httpText, norm, storage } from './util';
+// SoundCloud timed comments on screen: bubbles float up at the exact second each comment was written,
+// with markers on the timeline. Bubbles never overlap each other or the controls, keep clear of the
+// artwork and title while there is room beside them, and on busy songs wait their turn.
+import type { NuclearPluginAPI, Track } from '@nuclearplayer/plugin-sdk';
 
-const API = 'https://api-v2.soundcloud.com';
+import { t } from '../i18n';
+import { esc } from '../lib/format';
+import { SoundCloudClient, type TimedComment } from '../soundcloud/client';
+
 const MAX_BUBBLES = 4;
 // Lifetime of a bubble: fades in, floats up with a gentle sway, fades out (keyframes in styles.ts)
 const BUBBLE_MS = 7000;
@@ -27,28 +29,27 @@ type Box = { x: number; y: number; w: number; h: number };
 const overlaps = (a: Box, b: Box) =>
   a.x < b.x + b.w + SPACING && b.x < a.x + a.w + SPACING && a.y < b.y + b.h + SPACING && b.y < a.y + a.h + SPACING;
 
-type Comment = { ts: number; body: string; user: string; avatar: string };
-
-export class SoundCloudComments {
+export class CommentBubbles {
   private token = 0;
-  private comments: Comment[] = [];
+  private comments: TimedComment[] = [];
   private ptr = 0;
   private lastMs = 0;
   private durationMs = 0;
   private enabled = true;
-  private clientId = storage.get('npx-sc', { clientId: '' }).clientId;
-  private waiting: Comment[] = [];
+  private client: SoundCloudClient;
+  private waiting: TimedComment[] = [];
   private lastSpawn = 0;
   // Space taken by the bubbles on screen (including their upward path), oldest first, and when each one leaves
   private taken: (Box & { until: number })[] = [];
   // The next bubble, built and measured once and kept (hidden) until it finds a spot
-  private next: { c: Comment; el: HTMLElement } | null = null;
+  private next: { c: TimedComment; el: HTMLElement } | null = null;
 
   // `avoid.never`: parts bubbles must never cover (controls, buttons…). `avoid.ifRoom`: parts they keep
   // clear of while there is space elsewhere (artwork, title); on small windows they may go over them.
-  constructor(private api: any, private layer: HTMLElement, private markers: HTMLElement,
+  constructor(api: NuclearPluginAPI, private layer: HTMLElement, private markers: HTMLElement,
     private avoid: { never: HTMLElement[]; ifRoom: HTMLElement[] }, private onStatus: (text: string) => void) {
-    // Shared by every bubble (see .sc-bubble in styles.ts)
+    this.client = new SoundCloudClient(api);
+    // Shared by every bubble (see styles/comments.ts)
     layer.style.setProperty('--life', `${BUBBLE_MS}ms`);
     layer.style.setProperty('--drift', `-${DRIFT_PX}px`);
   }
@@ -73,19 +74,19 @@ export class SoundCloudComments {
     return this.enabled && this.comments.length ? t('comments', { n: this.comments.length }) : '';
   }
 
-  async load(track: any) {
+  async load(track: Track | undefined) {
     const token = ++this.token;
     this.comments = []; this.ptr = 0; this.lastMs = 0;
     this.clear(); this.markers.innerHTML = '';
     this.onStatus('');
     if (!track) return;
     try {
-      const sc = await this.findTrack(track);
+      const sc = await this.client.findTrack(track);
       if (token !== this.token || !sc) return;
       this.durationMs = track.durationMs || sc.duration || 0;
-      const comments = await this.fetchComments(sc.id);
+      const comments = await this.client.fetchComments(sc.id);
       if (token !== this.token) return;
-      this.comments = comments.sort((a, b) => a.ts - b.ts);
+      this.comments = comments;
       this.drawMarkers();
       this.onStatus(this.statusText());
     } catch (e) {
@@ -119,7 +120,7 @@ export class SoundCloudComments {
   }
 
   // Shows a bubble in a free spot; returns false (and keeps it hidden for the next try) when there is no room yet
-  private spawn(c: Comment, now: number) {
+  private spawn(c: TimedComment, now: number) {
     if (this.next?.c !== c) {
       this.next?.el.remove();
       const el = document.createElement('div');
@@ -192,76 +193,5 @@ export class SoundCloudComments {
     const max = Math.max(1, ...buckets.values());
     this.markers.innerHTML = Array.from(buckets, ([b, n]) =>
       `<i style="left:${b / 4}%;height:${4 + (n / max) * 8}px"></i>`).join('');
-  }
-
-  // --- SoundCloud API ---
-
-  private async getClientId(force = false): Promise<string> {
-    if (this.clientId && !force) return this.clientId;
-    const home = await httpText(this.api, 'https://soundcloud.com/');
-    const scripts = Array.from(home.matchAll(/<script[^>]+src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)).map((m) => m[1]);
-    for (const src of scripts.reverse()) {
-      const js = await httpText(this.api, src).catch(() => '');
-      const m = js.match(/client_id\s*:\s*"([A-Za-z0-9]{32})"/);
-      if (m) {
-        this.clientId = m[1];
-        storage.set('npx-sc', { clientId: this.clientId });
-        return this.clientId;
-      }
-    }
-    throw new Error('SoundCloud client_id not found');
-  }
-
-  private async get(path: string): Promise<any> {
-    const sep = path.includes('?') ? '&' : '?';
-    const url = (path.startsWith('http') ? path : API + path) + sep + 'client_id=';
-    try {
-      return await httpJson(this.api, url + (await this.getClientId()));
-    } catch (e: any) {
-      if (!/HTTP 40[13]/.test(String(e?.message))) throw e;
-      return httpJson(this.api, url + (await this.getClientId(true))); // expired client_id
-    }
-  }
-
-  private async findTrack(track: any): Promise<{ id: number; duration: number } | null> {
-    const src = track.source || {};
-    if (/soundcloud/i.test(src.provider || '')) {
-      if (/^\d+$/.test(String(src.id))) return { id: +src.id, duration: track.durationMs || 0 };
-      const url = src.url || (String(src.id).startsWith('http') ? src.id : '');
-      if (url) {
-        const r = await this.get(`/resolve?url=${encodeURIComponent(url)}`).catch(() => null);
-        if (r?.kind === 'track') return { id: r.id, duration: r.duration };
-      }
-    }
-    const title = track.title || '';
-    const artists = (track.artists || []).map((a: any) => a.name);
-    const res = await this.get(`/search/tracks?q=${encodeURIComponent(`${artists[0] || ''} ${title}`.trim())}&limit=15`);
-    const wanted = norm(title.replace(/\s*[-(\[].*(instrumental|remix|vip|edit|mix).*$/i, '') || title);
-    let best: any = null, bestScore = 0;
-    for (const c of res.collection || []) {
-      const ct = norm(c.title);
-      const titleOk = wanted.length > 1 && (ct.includes(wanted) || wanted.includes(ct));
-      if (!titleOk) continue;
-      const who = norm(`${c.user?.username || ''} ${c.publisher_metadata?.artist || ''} ${c.title}`);
-      const artistOk = artists.some((a: string) => norm(a).length > 1 && who.includes(norm(a)));
-      const durOk = track.durationMs ? Math.abs((c.duration || 0) - track.durationMs) < 4000 : false;
-      const score = (artistOk ? 2 : 0) + (durOk ? 2 : 0) + (ct === wanted ? 1 : 0) + Math.min(1, (c.comment_count || 0) / 100);
-      if ((artistOk || durOk) && score > bestScore) { best = c; bestScore = score; }
-    }
-    return best ? { id: best.id, duration: best.duration } : null;
-  }
-
-  private async fetchComments(id: number): Promise<Comment[]> {
-    const out: Comment[] = [];
-    let path: string | null = `/tracks/${id}/comments?threaded=0&filter_replies=1&limit=200&offset=0`;
-    for (let page = 0; path && page < 5; page++) {
-      const data: any = await this.get(path);
-      for (const c of data.collection || []) {
-        if (typeof c.timestamp !== 'number' || !c.body) continue;
-        out.push({ ts: c.timestamp, body: c.body, user: c.user?.username || '', avatar: c.user?.avatar_url || '' });
-      }
-      path = data.next_href ? String(data.next_href).replace(/([?&])client_id=[^&]*&?/, '$1') : null;
-    }
-    return out;
   }
 }
