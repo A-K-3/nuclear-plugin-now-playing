@@ -16,8 +16,9 @@ export function installFakeHost() {
   const settingListeners = new Map<string, Set<Listener>>();
   const calls: string[] = [];
   const settings: Record<string, SettingValue> = { comments: false };
+  // Song 3 has a Cyrillic title, to check that searching works in any script
   const track = (i: number) => ({
-    title: `Song ${i}`, artists: [{ name: `Artist ${i}`, roles: [] }], durationMs: 180000 + i * 1000,
+    title: i === 3 ? 'Сломана' : `Song ${i}`, artists: [{ name: `Artist ${i}`, roles: [] }], durationMs: 180000 + i * 1000,
     source: { provider: 'test', id: String(i) },
   });
   const queue = { currentIndex: 1, items: Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, track: track(i), status: 'success' as const, addedAtIso: '' })) };

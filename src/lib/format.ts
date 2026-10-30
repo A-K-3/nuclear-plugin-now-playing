@@ -15,6 +15,7 @@ export const fmtLong = (seconds: number) => {
   return h ? `${h} h ${m % 60} min` : `${m} min`;
 };
 
-// Lowercase ASCII letters and digits only, so "Beyoncé – Halo!" matches "beyonce halo"
+// Lowercase letters and digits of any script, without accents or symbols, so "Beyoncé – Halo!"
+// matches "beyonce halo" and "Сломана" matches "сломана" (Cyrillic, Japanese… are kept)
 export const norm = (s: string) =>
-  String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[’']/g, "'").replace(/[^a-z0-9]+/g, '');
+  String(s || '').toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]+/gu, '');
