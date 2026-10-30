@@ -1,6 +1,9 @@
 // Player column: visualizer canvas, artwork with its glow and shine, title block
 import { R } from './root';
 
+// px; also used by the cursor tilt in effects.ts
+export const PERSPECTIVE = 1200;
+
 export default `
 /* Player */
 ${R} .player { position:relative; min-width:0; overflow:hidden; }
@@ -10,7 +13,7 @@ ${R} .stage { position:relative; z-index:1; height:100%; display:flex; align-ite
 ${R} .main { display:flex; flex-direction:column; align-items:center; gap:2.2vh; min-width:0; flex:0 1 auto; width:100%; max-width:min(80vh, 100%); }
 /* Artwork: 3D wrapper (cursor tilt + beat scale), glow behind it, glass shine on top */
 ${R} .cover-wrap { position:relative; width:min(52vh,46vw); aspect-ratio:1; margin-bottom:.5vh; transition:width .4s ease;
-  perspective:1200px; transform-style:preserve-3d; }
+  perspective:${PERSPECTIVE}px; transform-style:preserve-3d; }
 /* A soft radial gradient instead of filter:blur, so scaling it every frame needs no filter pass */
 ${R} .cover-glow { position:absolute; inset:-22%; opacity:.3; pointer-events:none; transition:background 1.2s;
   background:radial-gradient(circle, var(--accent) 0%, color-mix(in srgb, var(--accent) 45%, transparent) 28%, transparent 62%); }

@@ -7,6 +7,7 @@
 import type { NuclearPluginAPI, QueueItem } from '@nuclearplayer/plugin-sdk';
 
 import { t } from '../i18n';
+import { display } from '../lib/track';
 
 const DELAY_MS = 1500;
 const STALL_MS = 30000;
@@ -26,7 +27,7 @@ export function setupAutoSkip(api: NuclearPluginAPI, notify: (text: string) => v
     }
     const queue = await api.Queue.getQueue().catch(() => null);
     if (!queue || queue.currentIndex >= queue.items.length - 1) return;
-    notify(t(reason, { title: item.track?.title || t('thisSong') }));
+    notify(t(reason, { title: display(item.track).title || t('thisSong') }));
     api.Queue.goToNext();
   };
 

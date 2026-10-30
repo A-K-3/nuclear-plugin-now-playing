@@ -6,13 +6,16 @@ import type { NuclearPluginAPI, Track } from '@nuclearplayer/plugin-sdk';
 import { norm } from '../lib/format';
 import { httpJson, httpText } from '../lib/http';
 import { storage } from '../lib/storage';
+import { VERSION_WORDS } from '../lib/track';
 
 const API = 'https://api-v2.soundcloud.com';
 const CLIENT_ID_KEY = 'npx-sc';
 const COMMENT_PAGES = 5; // 200 comments each
+// "Song (Remix)" or "Song - VIP" is searched as "Song"
+const VERSION_SUFFIX = new RegExp(`\\s*[-([].*(${VERSION_WORDS.join('|')}).*$`, 'i');
 
 export type TimedComment = { ts: number; body: string; user: string; avatar: string };
-export type SoundCloudTrack = { id: number; duration: number };
+type SoundCloudTrack = { id: number; duration: number };
 
 type ApiTrack = {
   kind?: string; id: number; title: string; duration?: number; comment_count?: number;
@@ -39,7 +42,7 @@ export class SoundCloudClient {
     const title = track.title || '';
     const artists = (track.artists || []).map((a) => a.name);
     const res = await this.get<Page<ApiTrack>>(`/search/tracks?q=${encodeURIComponent(`${artists[0] || ''} ${title}`.trim())}&limit=15`);
-    const wanted = norm(title.replace(/\s*[-([].*(instrumental|remix|vip|edit|mix).*$/i, '') || title);
+    const wanted = norm(title.replace(VERSION_SUFFIX, '') || title);
     let best: ApiTrack | null = null, bestScore = 0;
     for (const c of res.collection || []) {
       const ct = norm(c.title);

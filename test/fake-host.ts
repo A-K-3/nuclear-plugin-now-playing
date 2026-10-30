@@ -1,21 +1,28 @@
 // A stand-in for Nuclear's plugin API, run inside the test page. It records calls and subscriptions
 // so the tests can check what the plugin did, and loads the built bundle the way Nuclear does
 // (CommonJS, with only `react` provided).
-// Everything here is serialized into the page, so it must not use imports or outer variables.
+// Everything inside installFakeHost is serialized into the page, so it must not use outer variables;
+// type-only imports are fine (they disappear when compiled).
+import type { NuclearPluginAPI, SettingValue } from '@nuclearplayer/plugin-sdk';
+
+// The subset of the plugin API the fake implements; `satisfies` makes the type check fail when the SDK
+// renames or changes a method the fake (and so the plugin) relies on
+type FakeApi = { [K in keyof NuclearPluginAPI]?: Partial<NuclearPluginAPI[K]> };
 
 export function installFakeHost() {
-  type Listener = (value: unknown) => void;
+  // Any listener; each subscription passes its own kind of value
+  type Listener = (value: never) => void;
   const listeners = { queue: new Set<Listener>(), playback: new Set<Listener>(), current: new Set<Listener>(), favorites: new Set<Listener>() };
   const settingListeners = new Map<string, Set<Listener>>();
   const calls: string[] = [];
-  const settings: Record<string, unknown> = { comments: false };
+  const settings: Record<string, SettingValue> = { comments: false };
   const track = (i: number) => ({
     title: `Song ${i}`, artists: [{ name: `Artist ${i}`, roles: [] }], durationMs: 180000 + i * 1000,
     source: { provider: 'test', id: String(i) },
   });
-  const queue = { currentIndex: 1, items: Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, track: track(i), status: 'success', addedAtIso: '' })) };
-  const playback = { status: 'playing', seek: 30, duration: 181 };
-  const call = (name: string) => (...args: unknown[]) => { calls.push(name); return Promise.resolve(args[0]); };
+  const queue = { currentIndex: 1, items: Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, track: track(i), status: 'success' as const, addedAtIso: '' })) };
+  const playback = { status: 'playing' as const, seek: 30, duration: 181 };
+  const call = (name: string) => async (..._args: unknown[]) => { calls.push(name); };
   const subscribe = (set: Set<Listener>) => (fn: Listener) => { set.add(fn); return () => set.delete(fn); };
 
   const api = {
@@ -37,8 +44,8 @@ export function installFakeHost() {
     },
     Settings: {
       register: async () => ({ registered: [] }),
-      get: async (id: string) => settings[id],
-      set: async (id: string, value: unknown) => { settings[id] = value; settingListeners.get(id)?.forEach((fn) => fn(value)); },
+      get: async <T extends SettingValue>(id: string) => settings[id] as T | undefined,
+      set: async (id: string, value: SettingValue) => { settings[id] = value; settingListeners.get(id)?.forEach((fn) => fn(value as never)); },
       getGlobal: async () => undefined,
       subscribe: (id: string, fn: Listener) => {
         if (!settingListeners.has(id)) settingListeners.set(id, new Set());
@@ -50,8 +57,8 @@ export function installFakeHost() {
     Favorites: { isTrackFavorite: async () => false, addTrack: call('Favorites.addTrack'), removeTrack: call('Favorites.removeTrack'), subscribe: subscribe(listeners.favorites) },
     Lyrics: { getLyricsForTrack: async () => [] },
     Http: { fetch: async () => { throw new Error('offline'); } },
-    Playlists: { saveQueueAsPlaylist: call('Playlists.saveQueueAsPlaylist') },
-  };
+    Playlists: { saveQueueAsPlaylist: async (name: string) => { calls.push('Playlists.saveQueueAsPlaylist'); return name; } },
+  } satisfies FakeApi;
 
   const subscriptions = () => {
     let n = 0;

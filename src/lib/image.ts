@@ -1,19 +1,22 @@
 // Image loading and the accent colour taken from the artwork
+import { withTimeout } from './http';
 
-export const loadImage = (src: string, cors: boolean, timeoutMs = 5000) =>
-  new Promise<HTMLImageElement | null>((resolve) => {
+const LOAD_TIMEOUT_MS = 5000;
+
+// The loaded image, or null on error or timeout
+const loadImage = (src: string, cors: boolean) =>
+  withTimeout(new Promise<HTMLImageElement | null>((resolve) => {
     const im = new Image();
     if (cors) im.crossOrigin = 'anonymous';
-    const timer = setTimeout(() => resolve(null), timeoutMs);
-    im.onload = () => { clearTimeout(timer); resolve(im); };
-    im.onerror = () => { clearTimeout(timer); resolve(null); };
+    im.onload = () => resolve(im);
+    im.onerror = () => resolve(null);
     im.src = src;
-  });
+  }), LOAD_TIMEOUT_MS, () => null);
 
-export type Colors = { accent: string; tint: number[] };
+type Colors = { accent: string; tint: number[] };
 
 // Dominant colour (ignores near-white, near-black and greys). null when the canvas is CORS-tainted
-export function accentFrom(img: HTMLImageElement): Colors | null {
+function accentFrom(img: HTMLImageElement): Colors | null {
   try {
     const c = document.createElement('canvas'), n = 24;
     c.width = c.height = n;

@@ -14,7 +14,13 @@ export class Artwork {
   private token = 0;
   private lastUrl: string | null = null;
 
-  constructor(private root: HTMLElement, private q: Query, private onFlip: () => void) {}
+  // Two layers of artwork and background, crossfaded
+  private layers;
+
+  constructor(private root: HTMLElement, q: Query, private onFlip: () => void) {
+    const layer = (id: 'A' | 'B') => ({ img: q<HTMLImageElement>(`[data-img="${id}"]`), bg: q(`[data-bg="${id}"]`) });
+    this.layers = { A: layer('A'), B: layer('B') };
+  }
 
   show(track: Track | undefined) {
     const url = coverFor(track, true);
@@ -26,13 +32,13 @@ export class Artwork {
   private load(url: string) {
     const token = ++this.token;
     const back = this.front === 'A' ? 'B' : 'A';
-    const img = this.q<HTMLImageElement>(`[data-img="${back}"]`), bg = this.q(`[data-bg="${back}"]`);
+    const { img, bg } = this.layers[back], front = this.layers[this.front];
     this.setAccent('#fff', NEUTRAL_TINT);
     img.onload = () => {
       if (token !== this.token) return;
       bg.style.backgroundImage = `url("${url}")`;
       img.style.opacity = '1'; bg.style.opacity = '1';
-      this.q(`[data-img="${this.front}"]`).style.opacity = '0'; this.q(`[data-bg="${this.front}"]`).style.opacity = '0';
+      front.img.style.opacity = '0'; front.bg.style.opacity = '0';
       this.front = back;
       this.onFlip();
     };

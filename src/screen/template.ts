@@ -75,6 +75,13 @@ export const template = () => `
   </aside>
 </div>`;
 
+// Plays a CSS animation again from the start: remove the class (or inline animation), force a reflow, put it back
+export function restartAnimation(el: HTMLElement, className?: string) {
+  if (className) el.classList.remove(className); else el.style.animation = 'none';
+  void el.offsetWidth;
+  if (className) el.classList.add(className); else el.style.animation = '';
+}
+
 // Marks a button as on/off without touching its other classes
 export const setOn = (el: Element, on: boolean) => { el.classList.toggle('on', on); el.classList.toggle('off', !on); };
 

@@ -9,7 +9,6 @@ import chrome from './chrome';
 import overlays from './overlays';
 import queue from './queue';
 import responsive from './responsive';
-import playerButton from './player-button';
 
 export { ROOT_ID } from './root';
 
@@ -24,5 +23,4 @@ export const CSS = [
   overlays,
   queue,
   responsive,
-  playerButton,
 ].join('');

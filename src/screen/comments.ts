@@ -6,9 +6,10 @@ import type { NuclearPluginAPI, Track } from '@nuclearplayer/plugin-sdk';
 import { t } from '../i18n';
 import { esc } from '../lib/format';
 import { SoundCloudClient, type TimedComment } from '../soundcloud/client';
+import { restartAnimation } from './template';
 
 const MAX_BUBBLES = 4;
-// Lifetime of a bubble: fades in, floats up with a gentle sway, fades out (keyframes in styles.ts)
+// Lifetime of a bubble: fades in, floats up with a gentle sway, fades out (keyframes in styles/comments.ts)
 const BUBBLE_MS = 7000;
 // How far a bubble rises over its lifetime; its whole path must stay clear
 const DRIFT_PX = 50;
@@ -146,9 +147,7 @@ export class CommentBubbles {
     el.style.left = `${spot.x}px`;
     el.style.top = `${spot.y + DRIFT_PX}px`;
     // Restart its animation, which has been running while it waited hidden
-    el.style.animation = 'none';
-    void el.offsetWidth;
-    el.style.animation = '';
+    restartAnimation(el);
     el.style.visibility = '';
     this.next = null;
     this.taken.push({ ...spot, until: now + BUBBLE_MS });

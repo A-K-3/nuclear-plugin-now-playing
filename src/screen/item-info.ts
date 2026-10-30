@@ -4,7 +4,7 @@ import type { QueueItem, Track } from '@nuclearplayer/plugin-sdk';
 import { norm } from '../lib/format';
 import { coverFor, display } from '../lib/track';
 
-export type ItemInfo = { track: Track; title: string; artist: string; search: string; thumb: string };
+type ItemInfo = { track: Track; title: string; artist: string; search: string; thumb: string };
 
 export class ItemInfoCache {
   private cache = new Map<string, ItemInfo>();

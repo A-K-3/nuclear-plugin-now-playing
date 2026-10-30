@@ -7,6 +7,7 @@ import type { NuclearPluginAPI, PlaybackState } from '@nuclearplayer/plugin-sdk'
 import { AudioAnalyser } from '../audio/analyser';
 import { locale, t } from '../i18n';
 import { frameStep } from '../lib/math';
+import { Scope } from '../lib/scope';
 import { display } from '../lib/track';
 import { appWindow, onDragRegionMouseDown } from '../nuclear/window';
 import type { Prefs } from '../settings';
@@ -23,11 +24,11 @@ import { createQuickSettings } from './quick-settings';
 import { QueuePanel } from './queue';
 import { PlayerState } from './state';
 import { CSS, ROOT_ID } from './styles';
-import { queryIn, setOn, template } from './template';
+import { queryIn, restartAnimation, setOn, template } from './template';
 import { UpNext } from './up-next';
 import { SpectrumView } from './visualizer';
 
-export const HOTKEY = 'F9';
+const HOTKEY = 'F9';
 const IDLE_MS = 3000; // without mouse movement: hide the cursor and controls, let the artwork float
 const MODES_POLL_MS = 1000;
 const CLOCK_MS = 5000;
@@ -71,13 +72,11 @@ export function createScreen(api: NuclearPluginAPI) {
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
   let prefs: Prefs | null = null;
-  let open = false;
-  // Bumped on every open and close: async work started by an earlier opening checks it and stops
-  let session = 0;
-  let showLyrics = false, isFav = false, idle = false, pointerInside = false;
+  // The current opening of the screen (null while closed): owns its subscriptions, timers and frame loop
+  let session: Scope | null = null;
+  let showLyrics = false, settingsOpen = false, isFav = false, idle = false, pointerInside = false;
   let lastCurrentId: string | null = null;
-  const unsubs: Array<() => void> = [];
-  let raf = 0, lastFrame = 0, frameFailed = false, poll = 0, idleTimer = 0, clockTimer = 0, toastTimer = 0;
+  let idleTimer = 0, toastTimer = 0;
 
   function toast(text: string) {
     el.toast.textContent = text;
@@ -119,7 +118,7 @@ export function createScreen(api: NuclearPluginAPI) {
     try {
       if (isFav) await api.Favorites.removeTrack(track.source);
       else await api.Favorites.addTrack(track);
-      el.fav.classList.remove('pop'); void el.fav.offsetWidth; el.fav.classList.add('pop');
+      restartAnimation(el.fav, 'pop');
       await refreshFav();
       toast(t(isFav ? 'favAdded' : 'favRemoved'));
     } catch (e) { toast(`✗ ${(e as Error)?.message || e}`); }
@@ -142,6 +141,7 @@ export function createScreen(api: NuclearPluginAPI) {
   }
 
   function setSettingsOpen(on: boolean) {
+    settingsOpen = on;
     root.classList.toggle('show-settings', on);
     setOn(el.settingsBtn, on);
   }
@@ -168,10 +168,10 @@ export function createScreen(api: NuclearPluginAPI) {
     full: fullscreen,
     close: () => hide(),
     escape: () => {
-      if (root.classList.contains('show-settings')) setSettingsOpen(false);
+      if (settingsOpen) setSettingsOpen(false);
       else if (!document.fullscreenElement) hide();
     },
-    settings: () => setSettingsOpen(!root.classList.contains('show-settings')),
+    settings: () => setSettingsOpen(!settingsOpen),
     winMin: appWindow.minimize,
     winMax: appWindow.toggleMaximize,
     winClose: appWindow.close,
@@ -180,7 +180,7 @@ export function createScreen(api: NuclearPluginAPI) {
   root.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     // A click outside the open settings panel (and its gear) closes it
-    if (root.classList.contains('show-settings') && !target.closest('.settings-panel, [data-act="settings"]')) {
+    if (settingsOpen && !target.closest('.settings-panel, [data-act="settings"]')) {
       setSettingsOpen(false);
     }
     const btn = target.closest<HTMLElement>('[data-act]');
@@ -197,8 +197,8 @@ export function createScreen(api: NuclearPluginAPI) {
 
   // While open, the screen owns the keyboard (keys do not reach Nuclear's shortcuts)
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === HOTKEY) { e.preventDefault(); e.stopPropagation(); return open ? hide() : show(); }
-    if (!open) return;
+    if (e.key === HOTKEY) { e.preventDefault(); e.stopPropagation(); return session ? hide() : show(); }
+    if (!session) return;
     const target = e.target as HTMLElement | null;
     if (target?.tagName === 'INPUT') {
       e.stopPropagation();
@@ -245,7 +245,7 @@ export function createScreen(api: NuclearPluginAPI) {
     root.classList.toggle('fx', motion);
     effects.setEnabled(motion);
     // The analysis feeds both the visualizer and the beat effects
-    audio.setActive(motion || view.visible);
+    audio.setActive(motion, view.visible);
   }
   reducedMotion?.addEventListener('change', applyMotion);
 
@@ -259,36 +259,46 @@ export function createScreen(api: NuclearPluginAPI) {
     view.setMode(p.visualizer);
     applyMotion();
     comments.setEnabled(p.comments);
-    if (open && p.comments && !prev?.comments) comments.load(state.current?.track);
+    if (session && p.comments && !prev?.comments) comments.load(state.current?.track);
   }
 
   // --- Frame loop ---
-  function frame(now: number) {
-    // Scheduled first, so an error in one part cannot stop the screen
+  // Each part runs in its own try, so a failing part (logged once) does not stop the others
+  let pos = 0, dt = 0, now = 0;
+  const parts: Array<[string, () => void]> = [
+    ['controls', () => controls.update(pos)],
+    ['lyrics', () => { if (showLyrics) lyrics.update(pos); }],
+    ['comments', () => comments.update(pos, state.playing)],
+    ['audio', () => audio.update(state.playing, dt)], // levels read by the visualizer and the effects
+    ['visualizer', () => view.draw(state.playing, dt)],
+    // Float only while the cursor rests over the screen; with the cursor elsewhere the artwork stays straight
+    ['effects', () => effects.update(now, dt, idle && pointerInside)],
+    ['up next', () => upNext.update(pos)],
+  ];
+  const failed = new Set<string>();
+
+  function startFrames(scope: Scope) {
+    let raf = 0, last = 0;
+    const frame = (time: number) => {
+      raf = requestAnimationFrame(frame);
+      dt = frameStep(time, last);
+      now = last = time;
+      pos = state.position();
+      for (const [name, run] of parts) {
+        try { run(); } catch (e) {
+          if (!failed.has(name)) console.error(`[Now Playing] ${name} update failed`, e);
+          failed.add(name);
+        }
+      }
+    };
     raf = requestAnimationFrame(frame);
-    const dt = frameStep(now, lastFrame);
-    lastFrame = now;
-    try {
-      const pos = state.position(), playing = state.playing;
-      controls.update(pos);
-      if (showLyrics) lyrics.update(pos);
-      comments.update(pos, playing);
-      audio.update(playing, dt); // levels read by the visualizer and the effects
-      view.draw(playing, dt);
-      // Float only while the cursor rests over the screen; with the cursor elsewhere the artwork stays straight
-      effects.update(now, dt, idle && pointerInside);
-      upNext.update(pos);
-    } catch (e) {
-      if (!frameFailed) console.error('[Now Playing] frame update failed', e);
-      frameFailed = true;
-    }
+    scope.add(() => cancelAnimationFrame(raf));
   }
 
   // --- Open and close ---
   async function show() {
-    if (open) return;
-    open = true;
-    const current = ++session;
+    if (session) return;
+    const scope = session = new Scope();
     root.classList.add('open');
     root.scrollTop = 0;
     queue.reset(); controls.reset(); lastCurrentId = null;
@@ -296,35 +306,35 @@ export function createScreen(api: NuclearPluginAPI) {
     setLyrics(false);
     try {
       const [qu, playback] = await Promise.all([api.Queue.getQueue(), api.Playback.getState()]);
-      if (current !== session) return;
+      if (!scope.active) return;
       state.queue = qu;
       onPlayback(playback);
     } catch { /* Nuclear not ready */ }
-    if (current !== session) return; // closed (or reopened) while waiting
+    if (!scope.active) return; // closed (or reopened) while waiting
     // Window buttons only when Nuclear draws its own title bar (the one the screen covers)
     api.Settings.getGlobal('core.appearance.customTitleBar')
-      .then((custom) => { if (current === session) root.classList.toggle('custom-titlebar', !!custom && appWindow.available); })
+      .then((custom) => { if (scope.active) root.classList.toggle('custom-titlebar', !!custom && appWindow.available); })
       .catch(() => {});
     renderTrack(); queue.render(true);
-    unsubs.push(api.Queue.subscribe((qu) => { state.queue = qu; renderTrack(); queue.render(); }));
-    unsubs.push(api.Playback.subscribe((s) => { onPlayback(s); queue.renderCount(); }));
-    try { unsubs.push(api.Favorites.subscribe(() => refreshFav())); } catch { /* favorites unavailable */ }
-    poll = window.setInterval(() => controls.refreshModes(), MODES_POLL_MS);
-    tickClock(); clockTimer = window.setInterval(tickClock, CLOCK_MS);
-    lastFrame = 0; frameFailed = false;
-    raf = requestAnimationFrame(frame);
+    scope.add(api.Queue.subscribe((qu) => { state.queue = qu; renderTrack(); queue.render(); }));
+    scope.add(api.Playback.subscribe((s) => { onPlayback(s); queue.renderCount(); }));
+    try { scope.add(api.Favorites.subscribe(() => refreshFav())); } catch { /* favorites unavailable */ }
+    scope.interval(() => controls.refreshModes(), MODES_POLL_MS);
+    tickClock();
+    scope.interval(tickClock, CLOCK_MS);
+    failed.clear();
+    startFrames(scope);
     wake();
   }
 
   function hide() {
-    if (!open) return;
-    open = false;
-    session++;
+    if (!session) return;
+    session.close();
+    session = null;
     root.classList.remove('open');
     setSettingsOpen(false);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    unsubs.splice(0).forEach((u) => u());
-    clearInterval(poll); clearInterval(clockTimer); cancelAnimationFrame(raf); clearTimeout(idleTimer); clearTimeout(toastTimer);
+    clearTimeout(idleTimer); clearTimeout(toastTimer);
     audio.stop();
     comments.clear();
   }
@@ -333,7 +343,7 @@ export function createScreen(api: NuclearPluginAPI) {
     root,
     show,
     toast,
-    isOpen: () => open,
+    isOpen: () => !!session,
     setPrefs: applyPrefs,
     destroy() {
       hide();

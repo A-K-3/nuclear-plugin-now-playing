@@ -3,8 +3,11 @@ import type { Artwork, Track } from '@nuclearplayer/plugin-sdk';
 
 import { esc } from './format';
 
+// Words that name a version of a song rather than an artist ("… - Remix", "(sped up)")
+export const VERSION_WORDS = ['instrumental', 'remix', 'edit', 'mix', 'vip', 'extended', 'live', 'demo', 'radio edit', 'sped up', 'slowed'];
+
 // "beansclub - crossroad" uploaded by a label → title "crossroad", artist "beansclub"
-const VERSION = /^(instrumental|remix|edit|mix|vip|extended|live|demo|radio edit|sped up|slowed)\b/i;
+const VERSION = new RegExp(`^(${VERSION_WORDS.join('|')})\\b`, 'i');
 
 export function display(track: Track | undefined) {
   let title = track?.title || '';
@@ -26,7 +29,7 @@ export function art(track: Track | undefined, big: boolean): string {
 }
 
 // Fallback artwork: a gradient with a hue derived from the title, plus its initials
-export function fallbackCover(title: string, artist: string): string {
+function fallbackCover(title: string, artist: string): string {
   let h = 0;
   for (const ch of `${title}|${artist}`) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const hue = h % 360, hue2 = (hue + 50) % 360;

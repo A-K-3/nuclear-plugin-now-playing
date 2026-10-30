@@ -8,6 +8,7 @@ import type { NuclearPlugin, NuclearPluginAPI } from '@nuclearplayer/plugin-sdk'
 import React from 'react';
 
 import { initLanguage, t } from './i18n';
+import { Scope } from './lib/scope';
 import { setupAutoSkip } from './nuclear/auto-skip';
 import { setupDoubleClickPlay } from './nuclear/double-click';
 import { setupMediaSession } from './nuclear/media-session';
@@ -21,10 +22,9 @@ const BUTTON_STYLE = {
 };
 
 let screen: Screen | null = null;
-// Everything onEnable sets up is torn down from here, in reverse order
-const cleanups: Array<() => void> = [];
-// Bumped on every enable and disable: an onEnable still waiting when the plugin is disabled stops there
-let generation = 0;
+// The current enable of the plugin: everything onEnable sets up is registered here and torn down on
+// disable. An onEnable still waiting when the plugin is disabled finds its scope closed and stops.
+let enabled: Scope | null = null;
 
 const OpenWidget = () =>
   React.createElement('button', { onClick: () => screen?.show(), style: BUTTON_STYLE }, t('setOpenButton'));
@@ -39,29 +39,26 @@ const plugin: NuclearPlugin = {
   },
 
   async onEnable(api) {
-    const current = ++generation;
+    const scope = enabled = new Scope();
     await initLanguage(api);
-    if (current !== generation) return;
+    if (!scope.active) return;
     registerWidgets(api);
-    cleanups.push(() => api.Settings.unregisterWidget('open'));
+    scope.add(() => api.Settings.unregisterWidget('open'));
 
     const created = createScreen(api);
     screen = created;
-    cleanups.push(() => { created.destroy(); screen = null; });
-    cleanups.push(setupPlayerButton(() => created.show(), created.root));
-    cleanups.push(setupDoubleClickPlay());
-    cleanups.push(setupMediaSession(api));
-    cleanups.push(setupAutoSkip(api, (text) => { if (created.isOpen()) created.toast(text); }));
-
-    const unwatch = await watchSettings(api, (p) => created.setPrefs(p));
-    // Disabled while reading the settings: everything above is already torn down
-    if (current !== generation) unwatch();
-    else cleanups.push(unwatch);
+    scope.add(() => { created.destroy(); screen = null; });
+    scope.add(setupPlayerButton(() => created.show(), created.root));
+    scope.add(setupDoubleClickPlay());
+    scope.add(setupMediaSession(api));
+    scope.add(setupAutoSkip(api, (text) => { if (created.isOpen()) created.toast(text); }));
+    // Runs straight away if the plugin was disabled while the settings were being read
+    scope.add(await watchSettings(api, (p) => created.setPrefs(p)));
   },
 
   async onDisable() {
-    generation++;
-    cleanups.splice(0).reverse().forEach((fn) => { try { fn(); } catch { /* keep tearing down */ } });
+    enabled?.close();
+    enabled = null;
   },
 };
 

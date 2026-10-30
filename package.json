@@ -16,11 +16,13 @@
     "typecheck": "tsc -p .",
     "build": "esbuild src/index.ts --bundle --format=cjs --platform=browser --target=es2022 --external:react --external:@nuclearplayer/plugin-sdk --outfile=dist/plugin.js",
     "test": "npm run build && playwright test",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "pack": "bash scripts/pack.sh"
   },
   "devDependencies": {
     "@nuclearplayer/plugin-sdk": "2.9.0",
     "@playwright/test": "1.48.2",
+    "@types/node": "22.9.0",
     "@types/react": "18.3.12",
     "esbuild": "0.24.0",
     "typescript": "5.6.3"

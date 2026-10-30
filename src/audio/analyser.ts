@@ -5,7 +5,7 @@
 // music plays, the next candidate is tried. When no element yields a signal (for example a stream the
 // browser will not let us read), `live` stays false and the levels fall to zero instead of faking movement.
 // All rates are "per frame at 60 fps" and converted to the real time step (see lib/math).
-import { clamp, decay, ease } from '../lib/math';
+import { clamp, decay, ease, frames } from '../lib/math';
 
 export const BANDS = 64;
 const SILENCE_MS = 1500; // silence while playing before trying another element
@@ -44,6 +44,7 @@ export class AudioAnalyser {
   private peak = 0;
   private moving = false;
   private active = false;
+  private spectrumWanted = false;
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
@@ -70,10 +71,13 @@ export class AudioAnalyser {
   get level() { return this.bassLevel; }
   get pulse() { return this.kick; }
 
-  // Capture only while something uses the analysis (visualizer shown or beat effects on)
-  setActive(on: boolean) {
-    this.active = on;
-    if (!on) this.disconnect();
+  // Capture only while something uses the analysis: the beat (level, pulse) for the effects, the
+  // spectrum for the visualizer
+  setActive(beat: boolean, spectrum: boolean) {
+    this.active = beat || spectrum;
+    if (spectrum && !this.spectrumWanted) this.moving = true; // catch up with the current sound
+    this.spectrumWanted = spectrum;
+    if (!this.active) this.disconnect();
   }
 
   stop() {
@@ -91,7 +95,8 @@ export class AudioAnalyser {
     // Skip the FFT while paused once the spectrum has settled
     if (live && (playing || this.moving)) this.analyser!.getByteFrequencyData(this.freq);
     this.updateBeat(live && playing, dt);
-    this.updateSpectrum(live, dt);
+    // Paused (or silent) with the levels at rest: nothing new to compute
+    if (this.spectrumWanted && (this.moving || (live && playing))) this.updateSpectrum(live, dt);
   }
 
   private updateSpectrum(live: boolean, dt: number) {
@@ -105,7 +110,7 @@ export class AudioAnalyser {
       }
     }
     this.peak = Math.max(frameMax, this.peak * decay(PEAK_DECAY, dt));
-    const attack = ease(ATTACK, dt), release = ease(RELEASE, dt), still = MOVE_EPSILON * dt * 60;
+    const attack = ease(ATTACK, dt), release = ease(RELEASE, dt), still = MOVE_EPSILON * frames(dt);
     let moving = false;
     for (let i = 0; i < BANDS; i++) {
       const v = live ? Math.pow(Math.min(1, this.raw[i] / Math.max(this.peak, MIN_PEAK)), GAIN_CURVE) * HEADROOM : 0;
@@ -118,9 +123,10 @@ export class AudioAnalyser {
 
   private updateBeat(live: boolean, dt: number) {
     if (!live) {
-      const fade = (v: number, d: number) => (v * decay(d, dt) < SETTLE_EPSILON ? 0 : v * decay(d, dt));
-      this.bassLevel = fade(this.bassLevel, 0.92);
-      this.kick = fade(this.kick, 0.85);
+      if (!this.bassLevel && !this.kick) return;
+      const bass = this.bassLevel * decay(0.92, dt), kick = this.kick * decay(0.85, dt);
+      this.bassLevel = bass < SETTLE_EPSILON ? 0 : bass;
+      this.kick = kick < SETTLE_EPSILON ? 0 : kick;
       return;
     }
     const { bassFrom, bassTo } = this.bands();

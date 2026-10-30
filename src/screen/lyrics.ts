@@ -2,7 +2,7 @@
 // Synced lyrics (line or word level) highlight in time with the song; click a line to seek to it.
 import type { AttributedLyrics, NuclearPluginAPI, Track } from '@nuclearplayer/plugin-sdk';
 
-import { locale, t } from '../i18n';
+import { t } from '../i18n';
 import { esc } from '../lib/format';
 import { withTimeout } from '../lib/http';
 
@@ -34,7 +34,6 @@ export class LyricsPanel {
   private sung = -1; // index of the last word marked as sung
 
   constructor(private api: NuclearPluginAPI, private el: HTMLElement, onSeek: (seconds: number) => void) {
-    el.lang = locale();
     el.addEventListener('click', (e) => {
       const line = (e.target as HTMLElement).closest<HTMLElement>('[data-start]');
       if (line && this.synced) onSeek(+line.dataset.start! / 1000);

@@ -1,5 +1,5 @@
-# On a vX.Y.Z tag: check it matches package.json, type check, build plugin.zip, compile it the way
-# Nuclear does (to catch missing files) and publish a GitHub release with it.
+# On a vX.Y.Z tag: check it matches package.json, type check, build plugin.zip (scripts/pack.sh also
+# compiles it the way Nuclear does, to catch missing files) and publish a GitHub release with it.
 # Nuclear compiles the TypeScript on install, so the zip ships package.json (whose "main" points to
 # src/index.ts), the license and the src folder.
 name: Release
@@ -34,15 +34,8 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Build plugin.zip
-        run: zip -qr plugin.zip package.json LICENSE src
-
-      - name: Compile from the zip (check)
-        run: |
-          mkdir /tmp/plugin && unzip -q plugin.zip -d /tmp/plugin
-          entry=$(node -p "require('/tmp/plugin/package.json').main")
-          npx esbuild "/tmp/plugin/$entry" --bundle --format=cjs --platform=browser \
-            --external:react --external:@nuclearplayer/plugin-sdk --outfile=/tmp/check.js
+      - name: Build and check plugin.zip
+        run: npm run pack
 
       - name: Publish release
         env:

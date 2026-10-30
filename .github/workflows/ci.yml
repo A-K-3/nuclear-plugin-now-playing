@@ -30,9 +30,4 @@ jobs:
         run: npm test
 
       - name: Package check
-        run: |
-          zip -qr plugin.zip package.json LICENSE src
-          mkdir /tmp/plugin && unzip -q plugin.zip -d /tmp/plugin
-          entry=$(node -p "require('/tmp/plugin/package.json').main")
-          npx esbuild "/tmp/plugin/$entry" --bundle --format=cjs --platform=browser \
-            --external:react --external:@nuclearplayer/plugin-sdk --outfile=/tmp/check.js
+        run: npm run pack
