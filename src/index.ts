@@ -4,6 +4,7 @@
 // - Double-click any track row to play it.
 // - Automatic skip of songs that fail to load.
 // - Media keys (keyboard, headphones) routed through Nuclear, with track info for the OS overlay.
+// - Nuclear's queue saves batched, so long queues (a 1000-song playlist) do not make it stutter.
 import type { NuclearPlugin, NuclearPluginAPI } from '@nuclearplayer/plugin-sdk';
 import React from 'react';
 
@@ -13,6 +14,7 @@ import { setupAutoSkip } from './nuclear/auto-skip';
 import { setupDoubleClickPlay } from './nuclear/double-click';
 import { setupMediaSession } from './nuclear/media-session';
 import { setupPlayerButton } from './nuclear/player-button';
+import { setupQueueSaveBatching } from './nuclear/queue-saves';
 // Folder imports must name index explicitly: Nuclear's loader resolves the imports inside a folder's
 // index one level too high (see scripts/build.mjs)
 import { createScreen, type Screen } from './screen/index';
@@ -53,6 +55,7 @@ const plugin: NuclearPlugin = {
     scope.add(setupPlayerButton(() => created.show(), created.root));
     scope.add(setupDoubleClickPlay());
     scope.add(setupMediaSession(api));
+    scope.add(setupQueueSaveBatching());
     scope.add(setupAutoSkip(api, (text) => { if (created.isOpen()) created.toast(text); }));
     // Runs straight away if the plugin was disabled while the settings were being read
     scope.add(await watchSettings(api, (p) => created.setPrefs(p)));
