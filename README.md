@@ -20,7 +20,7 @@ Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, des
 - **Now Playing screen.** Full-bleed artwork with a blurred, color-matched background, plus title, artist, album, seek bar, volume and playback controls.
 - **Synced lyrics.** Line- and word-level highlighting from any lyrics provider installed in Nuclear. Click a line to seek.
 - **SoundCloud timed comments.** Comments appear at the exact second they were posted, with markers on the timeline. This works for songs streamed from any source.
-- **Audio visualizer.** Along the bottom: frequency bars, a waveform or an LED meter. Around the artwork: a ring of bars, sparks thrown out on each kick, or a glow that lights up the background with the music. Driven by the actual audio output, with automatic gain so loud masters stay readable.
+- **Audio visualizer.** Along the bottom: frequency bars, a waveform or an LED meter. Around the artwork: a ring of bars, sparks, or a glow that lights up the background with the music. Sparks come in three styles (burst from the artwork on the kicks, a bonfire rising with the volume, a swarm that circles the artwork or follows the cursor) and three amounts; they stay away in silence, dim over the title and lyrics, trail the cursor, burst out of SoundCloud comments as they go, rebuild the artwork out of sparks at a song's drop, and set off fireworks on its last kicks. Driven by the actual audio output, with automatic gain so loud masters stay readable.
 - **Motion effects.** The artwork tilts in 3D towards the cursor with a glass shine, breathes with the bass and flips in on track changes. A beat-reactive glow and light pulse follow the music.
 - **Queue panel.** Search, drag to reorder, remove, resize, collapse and save the queue as a playlist.
 - **Up next.** A card previews the next song during the last 10 seconds.
@@ -74,6 +74,7 @@ Change them from the gear button on the screen, or under **Settings → Now Play
 | Motion effects | On (off when the OS reduces motion) |
 | Animated background | On |
 | Visualizer (off, bars, wave, LED, ring, sparks or glow) | Wave |
+| Sparks style (burst, bonfire or swarm) and amount (few, normal or lots) | Burst, normal |
 | Show clock | Off |
 | SoundCloud comments | On |
 

@@ -55,7 +55,8 @@ export function createScreen(api: NuclearPluginAPI) {
   const infos = new ItemInfoCache();
   const audio = new AudioAnalyser();
   const artwork = new Artwork(root, q, () => effects.flip());
-  const view = new SpectrumView(q<HTMLCanvasElement>('.viz'), q('.cover-wrap'), audio, () => artwork.accent);
+  const view = new SpectrumView(q<HTMLCanvasElement>('.viz'), q('.cover-wrap'), audio, () => artwork,
+    [q('.info'), q('.lyrics')]);
   const effects = new Effects({
     wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine i'),
     flash: q('.pulse'), backdrop: q('.backdrop'), info: q('.info'),
@@ -67,7 +68,9 @@ export function createScreen(api: NuclearPluginAPI) {
   const comments = new CommentBubbles(api, q('.sc-layer'), q('.sc-markers'), {
     never: ['.timeline', '.dock', '.back', '.clock', '.corner', '.upnext', '.settings-panel'].map((s) => q(s)),
     ifRoom: ['.cover-wrap', '.info'].map((s) => q(s)),
-  }, (text) => (el.status.textContent = text ? `💬 ${text}` : ''));
+  }, (text) => (el.status.textContent = text ? `💬 ${text}` : ''),
+  // A comment going away bursts into sparks
+  (rect) => view.popAt(rect));
   const quickSettings = createQuickSettings(q('.settings-panel'), api, (px) => root.style.setProperty('--blur', `${px}px`));
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
@@ -218,7 +221,12 @@ export function createScreen(api: NuclearPluginAPI) {
   window.addEventListener('keydown', onKey, true);
 
   // --- Idle: hides the cursor and controls, and lets the artwork float ---
-  const setIdle = (value: boolean) => { idle = value; root.classList.toggle('idle', value); };
+  const setIdle = (value: boolean) => {
+    idle = value;
+    root.classList.toggle('idle', value);
+    // A resting cursor no longer leads the sparks
+    if (value) view.pointer(null);
+  };
   const wake = () => {
     setIdle(false);
     clearTimeout(idleTimer);
@@ -228,12 +236,14 @@ export function createScreen(api: NuclearPluginAPI) {
     // The screen is fixed to the viewport, so the viewport size maps the cursor to -1…1
     pointerInside = true;
     effects.point((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1);
+    view.pointer(e.clientX, e.clientY);
     wake();
   });
   // Cursor gone to another monitor or window: ease the artwork back to straight
   root.addEventListener('mouseleave', () => {
     pointerInside = false;
     effects.point(0, 0);
+    view.pointer(null);
   });
 
   const tickClock = () => { el.clock.textContent = new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
@@ -244,6 +254,7 @@ export function createScreen(api: NuclearPluginAPI) {
     const motion = !!prefs?.effects && !reducedMotion?.matches;
     root.classList.toggle('fx', motion);
     effects.setEnabled(motion);
+    view.setSparks({ reducedMotion: !!reducedMotion?.matches });
     // The analysis feeds both the visualizer and the beat effects
     audio.setActive(motion, view.visible);
   }
@@ -257,6 +268,7 @@ export function createScreen(api: NuclearPluginAPI) {
     root.classList.toggle('animated', p.animatedBg);
     root.classList.toggle('show-clock', p.clock);
     view.setMode(p.visualizer);
+    view.setSparks({ style: p.sparkStyle, amount: p.sparkAmount });
     applyMotion();
     comments.setEnabled(p.comments);
     if (session && p.comments && !prev?.comments) comments.load(state.current?.track);
@@ -270,7 +282,7 @@ export function createScreen(api: NuclearPluginAPI) {
     ['lyrics', () => { if (showLyrics) lyrics.update(pos); }],
     ['comments', () => comments.update(pos, state.playing)],
     ['audio', () => audio.update(state.playing, dt)], // levels read by the visualizer and the effects
-    ['visualizer', () => view.draw(state.playing, dt)],
+    ['visualizer', () => view.draw(state.playing, dt, state.duration ? state.duration - pos : Infinity)],
     // Float only while the cursor rests over the screen; with the cursor elsewhere the artwork stays straight
     ['effects', () => effects.update(now, dt, idle && pointerInside)],
     ['up next', () => upNext.update(pos)],

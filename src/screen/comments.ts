@@ -48,7 +48,9 @@ export class CommentBubbles {
   // `avoid.never`: parts bubbles must never cover (controls, buttons…). `avoid.ifRoom`: parts they keep
   // clear of while there is space elsewhere (artwork, title); on small windows they may go over them.
   constructor(api: NuclearPluginAPI, private layer: HTMLElement, private markers: HTMLElement,
-    private avoid: { never: HTMLElement[]; ifRoom: HTMLElement[] }, private onStatus: (text: string) => void) {
+    private avoid: { never: HTMLElement[]; ifRoom: HTMLElement[] }, private onStatus: (text: string) => void,
+    // Called with a bubble's place on screen as it goes away
+    private onGone: (rect: DOMRect) => void = () => {}) {
     this.client = new SoundCloudClient(api);
     // Shared by every bubble (see styles/comments.ts)
     layer.style.setProperty('--life', `${BUBBLE_MS}ms`);
@@ -151,7 +153,10 @@ export class CommentBubbles {
     el.style.visibility = '';
     this.next = null;
     this.taken.push({ ...spot, until: now + BUBBLE_MS });
-    setTimeout(() => el.remove(), BUBBLE_MS);
+    setTimeout(() => {
+      if (el.isConnected) this.onGone(el.getBoundingClientRect());
+      el.remove();
+    }, BUBBLE_MS);
     return true;
   }
 

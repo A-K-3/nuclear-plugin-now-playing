@@ -1,11 +1,17 @@
 // Draws the analysed spectrum in the player. Along the bottom: bars (bass on the left), a mirrored
 // wave (bass at both edges, beside the controls, where it stays visible) or an LED meter. Around the
-// artwork, over the whole player: a ring of bars, sparks thrown out on the kicks, or a glow that
-// lights the background with the music. It fades in with a real signal and out without one, and
-// skips redrawing while nothing changes.
+// artwork, over the whole player: a ring of bars, sparks (see sparks.ts), or a glow that lights the
+// background with the music. It fades in with a real signal and out without one, and skips
+// redrawing while nothing changes.
 import { BANDS, type AudioAnalyser } from '../audio/analyser';
-import { clamp, decay, ease, frames } from '../lib/math';
+import type { Colors } from '../lib/image';
+import { clamp, ease, frames } from '../lib/math';
 import type { Prefs } from '../settings';
+import { roundedSquare } from './outline';
+import { SparkField, type Rect } from './sparks';
+
+// What the visualizer reads from the artwork (see Artwork)
+type ArtworkColors = { accent: string; colors: { version: number; data: Colors | null } };
 
 type Mode = Prefs['visualizer'];
 
@@ -16,11 +22,24 @@ const AROUND_COVER: Mode[] = ['ring', 'particles', 'glow'];
 // The glow is soft anyway: drawn at a fraction of the resolution and scaled up by the browser
 const GLOW_RESOLUTION = 0.2;
 
-const LED = { cols: 32, rows: 14, hot: 0.8, warm: 0.6, hotColor: '#ff6b8b', warmColor: '#ffd166', offAlpha: 0.1 };
-const RING = { bars: 128, gap: 10, maxLength: 0.42, width: 0.45 };
-// Corner radius of the outline the ring follows, as a share of the artwork's half size
-const RING_CORNER = 0.14;
-const SPARKS = { max: 400, perKick: 9, life: 0.012, drag: 0.985, speed: 1.6 };
+// peakMinRow: peak cells only from this row up (lower ones would only flicker)
+const LED = { cols: 32, rows: 14, hot: 0.8, warm: 0.6, hotColor: '#ff6b8b', warmColor: '#ffd166', offAlpha: 0.1, peakAlpha: 0.85, peakMinRow: 2 };
+// Lengths in CSS px: edge (space kept free at the canvas edge), peakGap (peak dot past its bar), dot (its radius)
+const RING = { bars: 128, gap: 10, maxLength: 0.42, width: 0.45, edge: 10, peakGap: 6, dot: 1.6, peakMin: 0.04, peakAlpha: 0.8, glow: 0.22, glowKick: 0.35 };
+// Peak marks hold at the highest level, then fall faster and faster (per 60 fps frame)
+const PEAK_FALL = 0.0007;
+
+// The highest recent level of each band, falling slowly
+class Peaks {
+  readonly at: Float32Array;
+  private speed: Float32Array;
+  constructor(n: number) { this.at = new Float32Array(n); this.speed = new Float32Array(n); }
+  update(i: number, level: number, step: number) {
+    if (level >= this.at[i]) { this.at[i] = level; this.speed[i] = 0; return; }
+    this.speed[i] += PEAK_FALL * step;
+    this.at[i] = Math.max(level, this.at[i] - this.speed[i] * step);
+  }
+}
 
 export class SpectrumView {
   private mode: Mode = 'bars';
@@ -30,6 +49,14 @@ export class SpectrumView {
   // Where the artwork sits on the canvas (CSS pixels): its centre, and half its size without the tilt
   // and beat transforms
   private coverAt = { cx: 0, cy: 0, half: 0 };
+  // The canvas on the page, the parts sparks dim over (title, lyrics) and the cursor, in CSS pixels
+  // relative to the canvas
+  private area = { left: 0, top: 0 };
+  private avoidAt: Rect[] = [];
+  private pointerAt: { x: number; y: number } | null = null;
+  private colorsVersion = -1;
+  private sparkOptions: { style: Prefs['sparkStyle']; amount: Prefs['sparkAmount']; reducedMotion: boolean } =
+    { style: 'burst', amount: 'normal', reducedMotion: false };
   private opacity = 0;
   private dirty = true;
   private lastColor = '';
@@ -38,14 +65,16 @@ export class SpectrumView {
   private waveLevels = new Float32Array(WAVE_POINTS);
   private resize: ResizeObserver;
   // Ring: points around a rounded square of half size 1 (x, y) and their outward direction (dx, dy)
-  private outline = roundedSquare(RING.bars, RING_CORNER);
-  // Sparks: position, velocity, life and size, one slot each
-  private sparks = { n: 0, x: new Float32Array(SPARKS.max), y: new Float32Array(SPARKS.max), vx: new Float32Array(SPARKS.max),
-    vy: new Float32Array(SPARKS.max), life: new Float32Array(SPARKS.max), r: new Float32Array(SPARKS.max) };
-  private spawnDebt = 0;
+  private outline = roundedSquare(RING.bars);
+  // State of the modes that move on their own, reset when the mode changes: the sparks, and each
+  // band's peak (LED and ring)
+  private sparks = new SparkField();
+  private peaks = new Peaks(BANDS);
   private glowTime = 0;
 
-  constructor(private canvas: HTMLCanvasElement, private cover: HTMLElement, private audio: AudioAnalyser, private accent: () => string) {
+  // `avoid`: what sparks dim over (title, lyrics)
+  constructor(private canvas: HTMLCanvasElement, private cover: HTMLElement, private audio: AudioAnalyser,
+    private artwork: () => ArtworkColors, private avoid: HTMLElement[]) {
     this.g = canvas.getContext('2d')!;
     // Sizes and the artwork's place are read only here, when something in the player changes size:
     // the layout is already up to date then, so reading it costs nothing. Reading it every frame
@@ -56,6 +85,7 @@ export class SpectrumView {
     // The artwork also moves when the panels beside it (lyrics) appear or change size
     const stage = cover.closest('.stage');
     if (stage) for (const part of Array.from(stage.children)) this.resize.observe(part);
+    for (const el of avoid) this.resize.observe(el);
   }
 
   private measure() {
@@ -63,6 +93,24 @@ export class SpectrumView {
     this.cssWidth = area.width;
     this.cssHeight = area.height;
     this.coverAt = { cx: box.left + box.width / 2 - area.left, cy: box.top + box.height / 2 - area.top, half: this.cover.offsetWidth / 2 };
+    this.area = { left: area.left, top: area.top };
+    this.avoidAt = this.avoid.map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height)
+      .map((r) => ({ x: r.left - area.left, y: r.top - area.top, w: r.width, h: r.height }));
+  }
+
+  // Sparks: style and amount, and the system's reduce-motion setting
+  setSparks(options: Partial<SpectrumView['sparkOptions']>) {
+    this.sparkOptions = { ...this.sparkOptions, ...options };
+    const o = this.sparkOptions;
+    this.sparks.configure(o.style, o.amount, o.reducedMotion);
+  }
+
+  // The cursor over the screen (viewport coordinates), or null when it left or rests (screen idle)
+  pointer(x: number | null, y = 0) { this.pointerAt = x === null ? null : { x: x - this.area.left, y: y - this.area.top }; }
+
+  // A SoundCloud comment bubble went away (viewport coordinates): it bursts into sparks
+  popAt(r: DOMRect) {
+    if (this.mode === 'particles') this.sparks.pop({ x: r.left - this.area.left, y: r.top - this.area.top, w: r.width, h: r.height });
   }
 
   get visible() { return this.mode !== 'off'; }
@@ -70,7 +118,8 @@ export class SpectrumView {
   setMode(mode: Mode) {
     this.mode = mode;
     this.dirty = true;
-    this.sparks.n = 0;
+    this.sparks.reset();
+    this.peaks = new Peaks(BANDS);
     this.canvas.style.display = mode === 'off' ? 'none' : '';
     this.canvas.classList.toggle('around', AROUND_COVER.includes(mode));
     this.canvas.classList.toggle('glow', mode === 'glow');
@@ -78,31 +127,41 @@ export class SpectrumView {
 
   destroy() { this.resize.disconnect(); }
 
-  // Call every frame, after the analyser has updated
-  draw(playing: boolean, dt: number) {
+  // Call every frame, after the analyser has updated. `remaining`: seconds left in the song
+  draw(playing: boolean, dt: number, remaining = Infinity) {
     if (this.mode === 'off' || !this.cssWidth || !this.cssHeight) return;
     const dpr = window.devicePixelRatio || 1, scale = this.mode === 'glow' ? dpr * GLOW_RESOLUTION : dpr;
     const w = Math.round(this.cssWidth * scale), h = Math.round(this.cssHeight * scale), { g } = this;
     const target = this.audio.live ? 1 : 0;
     this.opacity += (target - this.opacity) * ease(FADE, dt);
     if (Math.abs(target - this.opacity) < 0.01) this.opacity = target;
-    const color = this.accent();
+    const art = this.artwork(), color = art.accent;
     // Nothing visible or nothing changing: skip the redraw (sparks in flight keep moving)
-    const still = this.audio.settled && !this.dirty && (this.opacity === target) && !(playing && this.sparks.n);
+    const still = this.audio.settled && !this.dirty && (this.opacity === target) && !(playing && this.sparks.busy);
     if (still && (this.opacity === 0 || (!playing && color === this.lastColor))) return;
+    if (art.colors.version !== this.colorsVersion) {
+      this.colorsVersion = art.colors.version;
+      const c = art.colors.data;
+      this.sparks.setArtwork(c?.accentRgb ?? null, c?.tint ?? null, c);
+    }
     this.lastColor = color;
     this.dirty = false;
     const c = this.canvas;
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     g.clearRect(0, 0, w, h);
     g.globalAlpha = this.opacity;
+    // Time only moves the modes on while playing (paused: everything holds still)
+    const step = playing ? dt : 0;
+    if (this.mode === 'led' || this.mode === 'ring') {
+      for (let i = 0; i < BANDS; i++) this.peaks.update(i, this.audio.spectrum[i], frames(step));
+    }
     switch (this.mode) {
       case 'bars': this.drawBars(w, h, dpr, color); break;
       case 'wave': this.drawWave(w, h, dpr, color); break;
       case 'led': this.drawLed(w, h, dpr, color); break;
       case 'ring': this.drawRing(dpr, color); break;
-      case 'particles': this.drawSparks(dpr, color, playing ? dt : 0); break;
-      case 'glow': this.drawGlow(w, h, color, playing ? dt : 0); break;
+      case 'particles': this.drawSparks(dpr, step, remaining); break;
+      case 'glow': this.drawGlow(w, h, color, step); break;
     }
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
@@ -120,17 +179,23 @@ export class SpectrumView {
     }
   }
 
-  // A grid of lit cells, one colour at a time: unlit, the accent, and warmer near the top
+  // A grid of lit cells, one colour at a time: unlit, the accent, and warmer near the top. The highest
+  // cell of each column stays lit a moment (white) and drops back slowly.
   private drawLed(w: number, h: number, dpr: number, color: string) {
     const { g } = this, levels = this.audio.spectrum, { cols, rows } = LED;
     const gap = 3 * dpr, cw = (w - gap * (cols - 1)) / cols, ch = (h - gap * (rows - 1)) / rows;
-    const lit = new Array<number>(cols);
-    for (let col = 0; col < cols; col++) lit[col] = Math.round(levels[Math.floor((col / cols) * BANDS)] * rows);
-    const cells = (fill: string, alpha: number, from: number, to: number, on: boolean) => {
+    // Cells lit, and the peak cell, of each column
+    const lit = new Uint8Array(cols), peak = new Uint8Array(cols);
+    for (let col = 0; col < cols; col++) {
+      const band = Math.floor((col / cols) * BANDS);
+      lit[col] = Math.round(levels[band] * rows);
+      peak[col] = Math.min(rows - 1, Math.round(this.peaks.at[band] * rows));
+    }
+    const cells = (fill: string, alpha: number, shows: (col: number, row: number) => boolean) => {
       g.beginPath();
       for (let col = 0; col < cols; col++) {
-        for (let row = from; row < to; row++) {
-          if ((row < lit[col]) === on) g.rect(col * (cw + gap), h - (row + 1) * (ch + gap) + gap, cw, ch);
+        for (let row = 0; row < rows; row++) {
+          if (shows(col, row)) g.rect(col * (cw + gap), h - (row + 1) * (ch + gap) + gap, cw, ch);
         }
       }
       g.fillStyle = fill;
@@ -138,10 +203,11 @@ export class SpectrumView {
       g.fill();
     };
     const warm = Math.ceil(rows * LED.warm), hot = Math.ceil(rows * LED.hot);
-    cells(color, LED.offAlpha, 0, rows, false);
-    cells(color, 1, 0, warm, true);
-    cells(LED.warmColor, 1, warm, hot, true);
-    cells(LED.hotColor, 1, hot, rows, true);
+    cells(color, LED.offAlpha, (col, row) => row >= lit[col]);
+    cells(color, 1, (col, row) => row < warm && row < lit[col]);
+    cells(LED.warmColor, 1, (col, row) => row >= warm && row < hot && row < lit[col]);
+    cells(LED.hotColor, 1, (col, row) => row >= hot && row < lit[col]);
+    cells('#fff', LED.peakAlpha, (col, row) => row >= LED.peakMinRow && row === peak[col] && row >= lit[col]);
   }
 
   private drawWave(w: number, h: number, dpr: number, color: string) {
@@ -157,12 +223,12 @@ export class SpectrumView {
     this.glowStroke(color, dpr);
   }
 
-  // Glowing line: a wide faint stroke under a thin one (much cheaper than shadowBlur)
-  private glowStroke(color: string, dpr: number, width = 2) {
+  // Glowing line (the current path): a wide faint stroke under a thin one (much cheaper than shadowBlur)
+  private glowStroke(color: string, dpr: number, width = 2, glow = 0.25) {
     const { g } = this;
     g.strokeStyle = color;
     g.lineJoin = 'round';
-    g.globalAlpha = this.opacity * 0.25;
+    g.globalAlpha = this.opacity * glow;
     g.lineWidth = (width + 5) * dpr;
     g.stroke();
     g.globalAlpha = this.opacity;
@@ -171,62 +237,45 @@ export class SpectrumView {
   }
 
   // Bars standing out of the artwork's edges: bass at the top, treble at the bottom, mirrored left
-  // and right. The outline grows with the artwork on the kicks.
+  // and right. The outline grows with the artwork on the kicks, which also brighten its glow, and a
+  // dot past each bar marks its recent peak.
   private drawRing(dpr: number, color: string) {
     const box = this.coverBox(dpr);
     if (!box) return;
     const { g } = this, levels = this.audio.spectrum, { x, y, dx, dy } = this.outline, n = RING.bars;
     const half = box.half * (1 + this.audio.pulse * 0.035) + RING.gap * dpr, longest = box.half * RING.maxLength;
+    const peaks = new Path2D(), dot = RING.dot * dpr;
     g.beginPath();
     for (let k = 0; k < n; k++) {
       const band = Math.min(BANDS - 1, Math.round((Math.min(k, n - k) / (n / 2)) * (BANDS - 1)));
       const bx = box.cx + x[k] * half, by = box.cy + y[k] * half;
-      // Each bar stops short of the canvas edge it points at
-      const room = Math.min(dx[k] > 0 ? (box.w - bx) / dx[k] : dx[k] < 0 ? -bx / dx[k] : Infinity,
-        dy[k] > 0 ? (box.h - by) / dy[k] : dy[k] < 0 ? -by / dy[k] : Infinity) - 4 * dpr;
-      const len = 2 * dpr + levels[band] * clamp(room, 0, longest);
+      // Each bar (and its peak dot) stops short of the canvas edge it points at
+      const room = clamp(Math.min(dx[k] > 0 ? (box.w - bx) / dx[k] : dx[k] < 0 ? -bx / dx[k] : Infinity,
+        dy[k] > 0 ? (box.h - by) / dy[k] : dy[k] < 0 ? -by / dy[k] : Infinity) - RING.edge * dpr, 0, longest);
+      const len = 2 * dpr + levels[band] * room;
       g.moveTo(bx, by);
       g.lineTo(bx + dx[k] * len, by + dy[k] * len);
+      if (this.peaks.at[band] > RING.peakMin) {
+        const at = RING.peakGap * dpr + this.peaks.at[band] * room, px = bx + dx[k] * at, py = by + dy[k] * at;
+        peaks.moveTo(px + dot, py);
+        peaks.arc(px, py, dot, 0, Math.PI * 2);
+      }
     }
     g.lineCap = 'round';
-    this.glowStroke(color, dpr, Math.max(1.5, ((8 * half) / n) * RING.width / dpr));
+    this.glowStroke(color, dpr, Math.max(1.5, ((8 * half) / n) * RING.width / dpr), RING.glow + this.audio.pulse * RING.glowKick);
+    g.fillStyle = '#fff';
+    g.globalAlpha = this.opacity * RING.peakAlpha;
+    g.fill(peaks);
   }
 
-  // Sparks thrown out from the artwork's edges on each kick, slowing and fading as they go
-  private drawSparks(dpr: number, color: string, dt: number) {
+  private drawSparks(dpr: number, dt: number, remaining: number) {
     const box = this.coverBox(dpr);
     if (!box) return;
-    const s = this.sparks, { x, y, dx, dy } = this.outline, step = frames(dt);
-    // Kicks throw a burst; a loud bass keeps a light trickle going
-    this.spawnDebt += (this.audio.pulse * SPARKS.perKick + (this.audio.level > 0.3 ? 0.5 : 0)) * step;
-    for (; this.spawnDebt >= 1 && s.n < SPARKS.max; this.spawnDebt--) {
-      const k = Math.floor(Math.random() * x.length), i = s.n++;
-      const speed = (1 + Math.random() * 4) * (0.5 + this.audio.pulse) * SPARKS.speed * dpr, turn = (Math.random() - 0.5) * 0.8;
-      s.x[i] = box.cx + x[k] * box.half; s.y[i] = box.cy + y[k] * box.half;
-      s.vx[i] = (dx[k] * Math.cos(turn) - dy[k] * Math.sin(turn)) * speed;
-      s.vy[i] = (dx[k] * Math.sin(turn) + dy[k] * Math.cos(turn)) * speed;
-      s.life[i] = 1; s.r[i] = (1 + Math.random() * 2.5) * dpr;
-    }
-    this.spawnDebt = Math.min(this.spawnDebt, 1);
-    const { g } = this, drag = decay(SPARKS.drag, dt);
-    g.globalCompositeOperation = 'lighter';
-    g.fillStyle = color;
-    for (let i = 0; i < s.n; i++) {
-      s.x[i] += s.vx[i] * step; s.y[i] += s.vy[i] * step;
-      s.vx[i] *= drag; s.vy[i] *= drag;
-      s.life[i] -= SPARKS.life * step;
-      if (s.life[i] <= 0) {
-        // Move the last spark into this slot and look at the slot again
-        const last = --s.n;
-        s.x[i] = s.x[last]; s.y[i] = s.y[last]; s.vx[i] = s.vx[last]; s.vy[i] = s.vy[last]; s.life[i] = s.life[last]; s.r[i] = s.r[last];
-        i--;
-        continue;
-      }
-      g.globalAlpha = this.opacity * s.life[i];
-      g.beginPath();
-      g.arc(s.x[i], s.y[i], s.r[i], 0, Math.PI * 2);
-      g.fill();
-    }
+    const p = this.pointerAt;
+    this.sparks.draw(this.g, {
+      box, dpr, opacity: this.opacity, dt, pulse: this.audio.pulse, level: this.audio.level, spectrum: this.audio.spectrum,
+      remaining, avoid: this.avoidAt, pointer: p ? { x: p.x * dpr, y: p.y * dpr } : null,
+    });
   }
 
   // Soft lights drifting over the background, brighter and larger with the bass and the kicks
@@ -295,28 +344,4 @@ export class SpectrumView {
     }
     return this.gradient;
   }
-}
-
-// `n` points evenly spaced along a square of half size 1 with rounded corners (radius `corner`),
-// clockwise from the middle of the top edge, each with the direction pointing straight out
-function roundedSquare(n: number, corner: number) {
-  const x = new Float32Array(n), y = new Float32Array(n), dx = new Float32Array(n), dy = new Float32Array(n);
-  const side = 2 - 2 * corner, arc = (Math.PI / 2) * corner, perimeter = 4 * (side + arc);
-  // Each quarter starts half way along a side, runs to the corner, round it, and on to the next middle
-  for (let k = 0; k < n; k++) {
-    let d = (k / n) * perimeter;
-    const quarter = Math.floor(d / (side + arc));
-    d -= quarter * (side + arc);
-    let px: number, py: number, nx: number, ny: number;
-    if (d < side / 2) { px = d; py = -1; nx = 0; ny = -1; }
-    else if (d < side / 2 + arc) {
-      const a = -Math.PI / 2 + (d - side / 2) / corner;
-      nx = Math.cos(a); ny = Math.sin(a);
-      px = 1 - corner + nx * corner; py = -(1 - corner) + ny * corner;
-    } else { px = 1; py = -(1 - corner) + (d - side / 2 - arc); nx = 1; ny = 0; }
-    // Rotate the first quarter's point into the right quarter (90° clockwise each)
-    for (let r = 0; r < quarter; r++) { [px, py] = [-py, px]; [nx, ny] = [-ny, nx]; }
-    x[k] = px; y[k] = py; dx[k] = nx; dy[k] = ny;
-  }
-  return { x, y, dx, dy };
 }

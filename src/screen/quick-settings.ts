@@ -6,7 +6,7 @@ import type { NuclearPluginAPI } from '@nuclearplayer/plugin-sdk';
 import { t } from '../i18n';
 import { esc } from '../lib/format';
 import { storage } from '../lib/storage';
-import { BLUR_RANGE, DEFAULTS, VISUALIZER_MODES, type Prefs } from '../settings';
+import { BLUR_RANGE, DEFAULTS, SPARK_AMOUNTS, SPARK_STYLES, VISUALIZER_MODES, type Prefs } from '../settings';
 
 type ToggleKey = 'effects' | 'animatedBg' | 'clock' | 'comments';
 
@@ -21,6 +21,11 @@ const TOGGLES: Array<[ToggleKey, Parameters<typeof t>[0]]> = [
   ['comments', 'setComments'],
 ];
 
+// Buttons that set an enum setting, one per value
+type PickKey = 'visualizer' | 'sparkStyle' | 'sparkAmount';
+const seg = (key: PickKey, options: Array<[string, Parameters<typeof t>[0]]>) =>
+  `<div class="seg">${options.map(([v, label]) => `<button data-pick="${key}" data-value="${v}">${esc(t(label))}</button>`).join('')}</div>`;
+
 export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, onBlurPreview: (px: number) => void) {
   panel.innerHTML = `
     <h3>${esc(t('settings'))}</h3>
@@ -28,7 +33,11 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
       <div class="srow"><span>${esc(t(label))}</span><button class="switch" data-set="${key}" role="switch"></button></div>`).join('')}
     <div class="srow col viz-row">
       <div class="srow-line"><span>${esc(t('setVisualizer'))}</span><button class="switch" data-viz-switch role="switch"></button></div>
-      <div class="seg grid">${MODES.map(([v, label]) => `<button data-viz="${v}">${esc(t(label))}</button>`).join('')}</div>
+      ${seg('visualizer', MODES)}
+      <div class="spark-opts">
+        <span>${esc(t('setSparkStyle'))}</span>${seg('sparkStyle', SPARK_STYLES)}
+        <span>${esc(t('setSparkAmount'))}</span>${seg('sparkAmount', SPARK_AMOUNTS)}
+      </div>
     </div>
     <div class="srow col"><span>${esc(t('setBlur'))} <b class="blur-value"></b></span>
       <input type="range" min="${BLUR_RANGE.min}" max="${BLUR_RANGE.max}" step="${BLUR_RANGE.step}" class="blur-range"></div>`;
@@ -38,11 +47,15 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
   panel.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     const toggle = target.closest<HTMLElement>('[data-set]');
-    const viz = target.closest<HTMLElement>('[data-viz]');
+    const pick = target.closest<HTMLElement>('[data-pick]');
     if (toggle && prefs) api.Settings.set(toggle.dataset.set!, !prefs[toggle.dataset.set as ToggleKey]);
-    else if (viz) api.Settings.set('visualizer', viz.dataset.viz!);
+    else if (pick) api.Settings.set(pick.dataset.pick!, pick.dataset.value!);
     else if (target.closest('[data-viz-switch]') && prefs) {
-      api.Settings.set('visualizer', prefs.visualizer === 'off' ? storage.get(LAST_VIZ_KEY, { mode: DEFAULTS.visualizer }).mode : 'off');
+      if (prefs.visualizer === 'off') api.Settings.set('visualizer', storage.get(LAST_VIZ_KEY, { mode: DEFAULTS.visualizer }).mode);
+      else {
+        storage.set(LAST_VIZ_KEY, { mode: prefs.visualizer });
+        api.Settings.set('visualizer', 'off');
+      }
     }
   });
   // Live preview while dragging; persist once released
@@ -55,17 +68,17 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
   return {
     update(p: Prefs) {
       prefs = p;
-      for (const [key] of TOGGLES) {
-        const btn = panel.querySelector(`[data-set="${key}"]`)!;
-        btn.classList.toggle('on', p[key]);
-        btn.setAttribute('aria-checked', String(p[key]));
-      }
-      const vizOn = p.visualizer !== 'off', vizSwitch = panel.querySelector('[data-viz-switch]')!;
-      vizSwitch.classList.toggle('on', vizOn);
-      vizSwitch.setAttribute('aria-checked', String(vizOn));
+      const setSwitch = (selector: string, on: boolean) => {
+        const btn = panel.querySelector(selector)!;
+        btn.classList.toggle('on', on);
+        btn.setAttribute('aria-checked', String(on));
+      };
+      for (const [key] of TOGGLES) setSwitch(`[data-set="${key}"]`, p[key]);
+      const vizOn = p.visualizer !== 'off';
+      setSwitch('[data-viz-switch]', vizOn);
       panel.querySelector('.viz-row')!.classList.toggle('off', !vizOn);
-      if (vizOn) storage.set(LAST_VIZ_KEY, { mode: p.visualizer });
-      panel.querySelectorAll<HTMLElement>('[data-viz]').forEach((b) => b.classList.toggle('on', b.dataset.viz === p.visualizer));
+      panel.querySelector('.viz-row')!.classList.toggle('sparks', p.visualizer === 'particles');
+      panel.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.classList.toggle('on', p[b.dataset.pick as PickKey] === b.dataset.value));
       if (document.activeElement !== range) range.value = String(p.blur);
       panel.querySelector('.blur-value')!.textContent = `${p.blur} px`;
     },
