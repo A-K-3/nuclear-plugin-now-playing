@@ -24,6 +24,12 @@ ${R} .settings-panel h3 { font-size:12px; font-weight:700; letter-spacing:.12em;
 ${R} .srow { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; font-size:14px; }
 ${R} .srow + .srow { border-top:1px solid rgba(255,255,255,.06); }
 ${R} .srow.col { flex-direction:column; align-items:stretch; gap:8px; }
+${R} .srow-line { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+/* Visualizer: on/off switch, and its modes below only while on */
+${R} .viz-row.off { gap:0; }
+${R} .viz-row.off .seg { display:none; }
+${R} .seg.grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px; }
+${R} .seg.grid button { text-align:center; }
 ${R} .srow b { font-weight:600; color:var(--dim); font-variant-numeric:tabular-nums; }
 ${R} .switch { flex:none; width:38px; height:22px; padding:0; border-radius:999px; background:rgba(255,255,255,.16); opacity:1; }
 ${R} .switch::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff;
