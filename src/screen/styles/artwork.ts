@@ -9,6 +9,9 @@ export default `
 ${R} .player { position:relative; min-width:0; overflow:hidden; }
 ${R} .viz { position:absolute; left:0; right:0; bottom:0; height:24vh; width:100%; opacity:.5; pointer-events:none; z-index:0;
   mask-image:linear-gradient(to top, #000 30%, transparent); }
+/* Ring, sparks and glow: over the whole player, behind the artwork */
+${R} .viz.around { top:0; height:100%; opacity:.85; mask-image:none; }
+${R} .viz.glow { opacity:1; mix-blend-mode:screen; }
 ${R} .stage { position:relative; z-index:1; height:100%; display:flex; align-items:center; justify-content:center; gap:4vw; padding:5vh 4vw; }
 ${R} .main { display:flex; flex-direction:column; align-items:center; gap:2.2vh; min-width:0; flex:0 1 auto; width:100%; max-width:min(80vh, 100%); }
 /* Artwork: 3D wrapper (cursor tilt + beat scale), glow behind it, glass shine on top */
