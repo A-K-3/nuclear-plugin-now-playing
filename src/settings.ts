@@ -7,13 +7,16 @@ const CATEGORY = 'Now Playing';
 
 // Shared with the quick settings panel inside the screen
 export const BLUR_RANGE = { min: 0, max: 150, step: 10 };
-export const VISUALIZER_MODES: Array<[Prefs['visualizer'], Key]> = [['off', 'setVizOff'], ['bars', 'setVizBars'], ['wave', 'setVizWave']];
+export const VISUALIZER_MODES: Array<[Prefs['visualizer'], Key]> = [
+  ['off', 'setVizOff'], ['bars', 'setVizBars'], ['wave', 'setVizWave'], ['led', 'setVizLed'],
+  ['ring', 'setVizRing'], ['particles', 'setVizParticles'], ['glow', 'setVizGlow'],
+];
 
 export type Prefs = {
   blur: number;
   effects: boolean;
   animatedBg: boolean;
-  visualizer: 'off' | 'bars' | 'wave';
+  visualizer: 'off' | 'bars' | 'wave' | 'led' | 'ring' | 'particles' | 'glow';
   clock: boolean;
   comments: boolean;
 };

@@ -55,7 +55,7 @@ export function createScreen(api: NuclearPluginAPI) {
   const infos = new ItemInfoCache();
   const audio = new AudioAnalyser();
   const artwork = new Artwork(root, q, () => effects.flip());
-  const view = new SpectrumView(q<HTMLCanvasElement>('.viz'), audio, () => artwork.accent);
+  const view = new SpectrumView(q<HTMLCanvasElement>('.viz'), q('.cover-wrap'), audio, () => artwork.accent);
   const effects = new Effects({
     wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine i'),
     flash: q('.pulse'), backdrop: q('.backdrop'), info: q('.info'),

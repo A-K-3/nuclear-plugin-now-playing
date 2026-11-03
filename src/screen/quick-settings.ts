@@ -21,7 +21,7 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
     <h3>${esc(t('settings'))}</h3>
     ${TOGGLES.map(([key, label]) => `
       <div class="srow"><span>${esc(t(label))}</span><button class="switch" data-set="${key}" role="switch"></button></div>`).join('')}
-    <div class="srow"><span>${esc(t('setVisualizer'))}</span>
+    <div class="srow col"><span>${esc(t('setVisualizer'))}</span>
       <div class="seg">${VISUALIZER_MODES.map(([v, label]) => `<button data-viz="${v}">${esc(t(label))}</button>`).join('')}</div>
     </div>
     <div class="srow col"><span>${esc(t('setBlur'))} <b class="blur-value"></b></span>

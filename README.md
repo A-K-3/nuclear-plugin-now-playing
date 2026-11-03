@@ -20,7 +20,7 @@ Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, des
 - **Now Playing screen.** Full-bleed artwork with a blurred, color-matched background, plus title, artist, album, seek bar, volume and playback controls.
 - **Synced lyrics.** Line- and word-level highlighting from any lyrics provider installed in Nuclear. Click a line to seek.
 - **SoundCloud timed comments.** Comments appear at the exact second they were posted, with markers on the timeline. This works for songs streamed from any source.
-- **Audio visualizer.** Frequency bars or waveform, driven by the actual audio output, with automatic gain so loud masters stay readable.
+- **Audio visualizer.** Along the bottom: frequency bars, a waveform or an LED meter. Around the artwork: a ring of bars, sparks thrown out on each kick, or a glow that lights up the background with the music. Driven by the actual audio output, with automatic gain so loud masters stay readable.
 - **Motion effects.** The artwork tilts in 3D towards the cursor with a glass shine, breathes with the bass and flips in on track changes. A beat-reactive glow and light pulse follow the music.
 - **Queue panel.** Search, drag to reorder, remove, resize, collapse and save the queue as a playlist.
 - **Up next.** A card previews the next song during the last 10 seconds.
@@ -73,7 +73,7 @@ Change them from the gear button on the screen, or under **Settings → Now Play
 | Background blur | 80 px |
 | Motion effects | On (off when the OS reduces motion) |
 | Animated background | On |
-| Visualizer (off, bars or wave) | Wave |
+| Visualizer (off, bars, wave, LED, ring, sparks or glow) | Wave |
 | Show clock | Off |
 | SoundCloud comments | On |
 
@@ -81,7 +81,7 @@ Change them from the gear button on the screen, or under **Settings → Now Play
 ## Notes and limitations
 
 - **No official UI hooks.** Nuclear's plugin API has no way to add UI elements, so the player-bar button and double-click-to-play attach to Nuclear's interface directly. A future Nuclear update could break them. <kbd>F9</kbd> and the settings entry keep working either way.
-- **Visualizer signal.** The visualizer reads the playing `<audio>` element through `captureStream()`. When a stream cannot be captured, the bars fade out and a diagnostic message is written to the developer console.
+- **Visualizer signal.** The visualizer reads the playing `<audio>` element through `captureStream()`. When a stream cannot be captured, the visualizer fades out and a diagnostic message is written to the developer console.
 - **Lyrics provider required.** Lyrics need at least one lyrics plugin installed in Nuclear.
 - **Queue save batching.** The batching hooks into how Nuclear saves the queue (Tauri's store calls for `queue.json`). The latest queue is written about 1.5 seconds after it stops changing (at most 8 seconds later), when the window closes and when the plugin is disabled; if Nuclear is killed in that moment, the last few seconds of queue changes are lost. If a Nuclear update changes how the queue is saved, the batching simply stops applying. It does not change how Nuclear draws its own queue panel, which redraws every row on each change.
 

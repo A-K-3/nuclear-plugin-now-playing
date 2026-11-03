@@ -71,7 +71,17 @@ test('settings apply live', async ({ page }) => {
   await page.keyboard.press('F9');
   const canvas = page.locator('#npx-root .viz');
   await expect(canvas).toBeVisible();
-  await page.evaluate(() => (fakeHost.api as { Settings: { set(id: string, v: unknown): Promise<void> } }).Settings.set('visualizer', 'off'));
+  const setViz = (mode: string) => page.evaluate((m) => (fakeHost.api as { Settings: { set(id: string, v: unknown): Promise<void> } }).Settings.set('visualizer', m), mode);
+  // Ring, sparks and glow are drawn over the whole player, the others along the bottom
+  for (const mode of ['ring', 'particles', 'glow']) {
+    await setViz(mode);
+    await expect(canvas).toHaveClass(/around/);
+  }
+  for (const mode of ['led', 'bars', 'wave']) {
+    await setViz(mode);
+    await expect(canvas).not.toHaveClass(/around/);
+  }
+  await setViz('off');
   await expect(canvas).toBeHidden();
 });
 
