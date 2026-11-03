@@ -13,6 +13,7 @@ type Host = {
   api: unknown; calls: string[]; subscriptions(): number;
   load(code: string): { onLoad(api: unknown): Promise<void>; onEnable(api: unknown): Promise<void>; onDisable(api: unknown): Promise<void> };
   plugin?: ReturnType<Host['load']>;
+  setCurrent(index: number): void;
 };
 declare const fakeHost: Host;
 
@@ -164,5 +165,22 @@ test('the queue search finds titles in any script', async ({ page }) => {
   await page.locator('#npx-root .qsearch input').fill('сломана');
   await expect(page.locator('#npx-root .list li:not(.hidden)')).toHaveCount(1);
   await expect(page.locator('#npx-root .list li:not(.hidden) .t b')).toContainText('Сломана');
+  expect(errors).toEqual([]);
+});
+
+test('a new current track moves the marks without rebuilding the queue list', async ({ page }) => {
+  const errors = await start(page);
+  await page.keyboard.press('F9');
+  const rows = page.locator('#npx-root .list li');
+  await expect(rows.nth(1)).toHaveClass(/current/);
+  const first = await rows.nth(0).elementHandle();
+  await page.evaluate(() => fakeHost.setCurrent(3));
+  await expect(rows.nth(3)).toHaveClass(/current/);
+  await expect(rows.nth(1)).not.toHaveClass(/current/);
+  await expect(rows.nth(2)).toHaveClass(/played/);
+  await expect(page.locator('#npx-root .list .eq')).toHaveCount(1);
+  await expect(rows.nth(3).locator('.eq')).toHaveCount(1);
+  // Same element as before: the rows were kept
+  expect(await page.evaluate((el) => el?.isConnected, first)).toBe(true);
   expect(errors).toEqual([]);
 });

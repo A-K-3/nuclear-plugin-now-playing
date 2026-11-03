@@ -17,6 +17,13 @@ export function display(track: Track | undefined) {
   return { title, artist };
 }
 
+// Everything display() and art() read from a track, as one string: equal for an unchanged copy
+export function displaySignature(track: Track | undefined): string {
+  const pics = [...(track?.artwork?.items || []), ...(track?.album?.artwork?.items || [])]
+    .map((a) => `${a.url} ${a.width} ${a.purpose}`);
+  return [track?.title, (track?.artists || []).map((a) => a.name).join(','), track?.album?.title, ...pics].join('|');
+}
+
 // Largest artwork for the big cover, smallest usable one (at least 64 px) for thumbnails
 export function art(track: Track | undefined, big: boolean): string {
   const items = [...(track?.artwork?.items || []), ...(track?.album?.artwork?.items || [])]

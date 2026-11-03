@@ -27,6 +27,9 @@ export class SpectrumView {
   private g: CanvasRenderingContext2D;
   private cssWidth = 0;
   private cssHeight = 0;
+  // Where the artwork sits on the canvas (CSS pixels): its centre, and half its size without the tilt
+  // and beat transforms
+  private coverAt = { cx: 0, cy: 0, half: 0 };
   private opacity = 0;
   private dirty = true;
   private lastColor = '';
@@ -47,15 +50,7 @@ export class SpectrumView {
     // Sizes and the artwork's place are read only here, when something in the player changes size:
     // the layout is already up to date then, so reading it costs nothing. Reading it every frame
     // would make the browser lay out all of Nuclear's page again each time.
-    this.resize = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target !== canvas) continue;
-        this.cssWidth = entry.contentRect.width;
-        this.cssHeight = entry.contentRect.height;
-      }
-      this.measureCover();
-      this.dirty = true;
-    });
+    this.resize = new ResizeObserver(() => { this.measure(); this.dirty = true; });
     this.resize.observe(canvas);
     this.resize.observe(cover);
     // The artwork also moves when the panels beside it (lyrics) appear or change size
@@ -63,10 +58,10 @@ export class SpectrumView {
     if (stage) for (const part of Array.from(stage.children)) this.resize.observe(part);
   }
 
-  // The artwork's centre on the canvas and half its size (CSS pixels), without the tilt and beat transforms
-  private coverAt = { cx: 0, cy: 0, half: 0 };
-  private measureCover() {
+  private measure() {
     const box = this.cover.getBoundingClientRect(), area = this.canvas.getBoundingClientRect();
+    this.cssWidth = area.width;
+    this.cssHeight = area.height;
     this.coverAt = { cx: box.left + box.width / 2 - area.left, cy: box.top + box.height / 2 - area.top, half: this.cover.offsetWidth / 2 };
   }
 
@@ -252,8 +247,7 @@ export class SpectrumView {
     });
   }
 
-  // Where the artwork sits on the canvas (canvas pixels): its centre, half its size without the
-  // tilt and beat transforms, and the canvas size
+  // coverAt and the canvas size in canvas pixels
   private coverBox(dpr: number) {
     const { cx, cy, half } = this.coverAt;
     if (!half) return null;

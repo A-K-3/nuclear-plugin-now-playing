@@ -25,17 +25,17 @@ ${R} .list { position:relative; list-style:none; overflow-y:auto; padding:0 12px
 ${R} .list li { display:grid; grid-template-columns:46px 1fr auto; gap:12px; align-items:center; padding:7px 10px; border-radius:10px;
   cursor:pointer; position:relative; }
 ${R} .list li:hover { background:rgba(255,255,255,.07); }
-/* Rows out of view are skipped when laying out and painting (thousands with a long queue). Not while a
-   drop line shows on a row: it sticks out of the row and would be clipped. */
-${R} .list li:not(.drop-before):not(.drop-after) { content-visibility:auto; contain-intrinsic-size:auto 60px; }
+/* Rows out of view are skipped when laying out and painting (thousands with a long queue) */
+${R} .list li { content-visibility:auto; contain-intrinsic-size:auto 60px; }
 ${R} .list li.current { background:rgba(var(--tint),.45); box-shadow:inset 3px 0 0 var(--accent); }
 ${R} .list li.played { opacity:.4; }
 ${R} .list li.hidden { display:none; }
 ${R} .list li.dragging { opacity:.3; }
 ${R} .list li.drop-before::before, ${R} .list li.drop-after::after { content:""; position:absolute; left:8px; right:8px; height:2px;
   background:var(--accent); border-radius:2px; }
-${R} .list li.drop-before::before { top:-1px; }
-${R} .list li.drop-after::after { bottom:-1px; }
+/* Inside the row: anything outside it would be clipped by content-visibility */
+${R} .list li.drop-before::before { top:0; }
+${R} .list li.drop-after::after { bottom:0; }
 ${R} .list img { width:46px; height:46px; border-radius:6px; object-fit:cover; background:var(--faint); }
 ${R} .list .t { min-width:0; }
 ${R} .list .t b, ${R} .list .t span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

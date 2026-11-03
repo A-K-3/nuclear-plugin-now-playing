@@ -33,7 +33,6 @@ const IDLE_MS = 3000; // without mouse movement: hide the cursor and controls, l
 const MODES_POLL_MS = 1000;
 const CLOCK_MS = 5000;
 const TOAST_MS = 3500;
-const COVER_DELAY_MS = 300; // the screen's fade-in (.25 s) has finished
 
 export function createScreen(api: NuclearPluginAPI) {
   const style = document.createElement('style');
@@ -303,8 +302,13 @@ export function createScreen(api: NuclearPluginAPI) {
     root.classList.add('open');
     // Nuclear's own page is covered: let the browser skip styling, laying out and painting it (with a
     // long queue it is thousands of elements). Once the screen has faded in; shown again on close.
-    const covering = window.setTimeout(() => document.documentElement.classList.add(COVERING_CLASS), COVER_DELAY_MS);
-    scope.add(() => { clearTimeout(covering); document.documentElement.classList.remove(COVERING_CLASS); });
+    const cover = (e: AnimationEvent) => {
+      if (e.target !== root) return;
+      document.documentElement.classList.add(COVERING_CLASS);
+      root.removeEventListener('animationend', cover);
+    };
+    root.addEventListener('animationend', cover);
+    scope.add(() => { root.removeEventListener('animationend', cover); document.documentElement.classList.remove(COVERING_CLASS); });
     root.scrollTop = 0;
     queue.reset(); controls.reset(); lastCurrentId = null;
     controls.refreshModes();
