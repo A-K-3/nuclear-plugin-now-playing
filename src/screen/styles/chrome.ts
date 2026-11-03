@@ -28,16 +28,14 @@ ${R} .srow-line { display:flex; align-items:center; justify-content:space-betwee
 /* Visualizer: on/off switch, and its modes below only while on */
 ${R} .viz-row.off { gap:0; }
 ${R} .viz-row.off .seg { display:none; }
-${R} .seg.grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px; }
-${R} .seg.grid button { text-align:center; }
 ${R} .srow b { font-weight:600; color:var(--dim); font-variant-numeric:tabular-nums; }
 ${R} .switch { flex:none; width:38px; height:22px; padding:0; border-radius:999px; background:rgba(255,255,255,.16); opacity:1; }
 ${R} .switch::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff;
   box-shadow:0 1px 4px rgba(0,0,0,.4); transition:transform .2s ease; }
 ${R} .switch.on { background:var(--accent); }
 ${R} .switch.on::after { transform:translateX(16px); background:#111; }
-${R} .seg { display:flex; flex-wrap:wrap; padding:3px; border-radius:10px; background:rgba(255,255,255,.08); }
-${R} .seg button { padding:5px 10px; border-radius:8px; font-size:12.5px; opacity:.7; }
+${R} .seg { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px; padding:3px; border-radius:10px; background:rgba(255,255,255,.08); }
+${R} .seg button { padding:5px 10px; border-radius:8px; font-size:12.5px; opacity:.7; text-align:center; }
 ${R} .seg button.on { background:rgba(255,255,255,.16); opacity:1; color:var(--fg); }
 ${R} .blur-range { width:100%; accent-color:var(--accent); cursor:pointer; user-select:none; }
 

@@ -28,7 +28,7 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
       <div class="srow"><span>${esc(t(label))}</span><button class="switch" data-set="${key}" role="switch"></button></div>`).join('')}
     <div class="srow col viz-row">
       <div class="srow-line"><span>${esc(t('setVisualizer'))}</span><button class="switch" data-viz-switch role="switch"></button></div>
-      <div class="seg grid">${MODES.map(([v, label]) => `<button data-viz="${v}">${esc(t(label))}</button>`).join('')}</div>
+      <div class="seg">${MODES.map(([v, label]) => `<button data-viz="${v}">${esc(t(label))}</button>`).join('')}</div>
     </div>
     <div class="srow col"><span>${esc(t('setBlur'))} <b class="blur-value"></b></span>
       <input type="range" min="${BLUR_RANGE.min}" max="${BLUR_RANGE.max}" step="${BLUR_RANGE.step}" class="blur-range"></div>`;
@@ -42,7 +42,11 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
     if (toggle && prefs) api.Settings.set(toggle.dataset.set!, !prefs[toggle.dataset.set as ToggleKey]);
     else if (viz) api.Settings.set('visualizer', viz.dataset.viz!);
     else if (target.closest('[data-viz-switch]') && prefs) {
-      api.Settings.set('visualizer', prefs.visualizer === 'off' ? storage.get(LAST_VIZ_KEY, { mode: DEFAULTS.visualizer }).mode : 'off');
+      if (prefs.visualizer === 'off') api.Settings.set('visualizer', storage.get(LAST_VIZ_KEY, { mode: DEFAULTS.visualizer }).mode);
+      else {
+        storage.set(LAST_VIZ_KEY, { mode: prefs.visualizer });
+        api.Settings.set('visualizer', 'off');
+      }
     }
   });
   // Live preview while dragging; persist once released
@@ -55,16 +59,15 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
   return {
     update(p: Prefs) {
       prefs = p;
-      for (const [key] of TOGGLES) {
-        const btn = panel.querySelector(`[data-set="${key}"]`)!;
-        btn.classList.toggle('on', p[key]);
-        btn.setAttribute('aria-checked', String(p[key]));
-      }
-      const vizOn = p.visualizer !== 'off', vizSwitch = panel.querySelector('[data-viz-switch]')!;
-      vizSwitch.classList.toggle('on', vizOn);
-      vizSwitch.setAttribute('aria-checked', String(vizOn));
+      const setSwitch = (selector: string, on: boolean) => {
+        const btn = panel.querySelector(selector)!;
+        btn.classList.toggle('on', on);
+        btn.setAttribute('aria-checked', String(on));
+      };
+      for (const [key] of TOGGLES) setSwitch(`[data-set="${key}"]`, p[key]);
+      const vizOn = p.visualizer !== 'off';
+      setSwitch('[data-viz-switch]', vizOn);
       panel.querySelector('.viz-row')!.classList.toggle('off', !vizOn);
-      if (vizOn) storage.set(LAST_VIZ_KEY, { mode: p.visualizer });
       panel.querySelectorAll<HTMLElement>('[data-viz]').forEach((b) => b.classList.toggle('on', b.dataset.viz === p.visualizer));
       if (document.activeElement !== range) range.value = String(p.blur);
       panel.querySelector('.blur-value')!.textContent = `${p.blur} px`;
