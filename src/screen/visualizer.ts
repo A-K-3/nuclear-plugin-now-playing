@@ -22,7 +22,9 @@ const LED = { cols: 32, rows: 14, hot: 0.8, warm: 0.6, hotColor: '#ff6b8b', warm
 const RING = { bars: 128, gap: 10, maxLength: 0.42, width: 0.45, edge: 10, peakGap: 6, dot: 1.6, peakMin: 0.04, peakAlpha: 0.8, glow: 0.22, glowKick: 0.35 };
 // Corner radius of the outline the ring follows, as a share of the artwork's half size
 const RING_CORNER = 0.14;
-const SPARKS = { max: 500, perKick: 9, burst: 36, life: 0.012, drag: 0.985, speed: 1.6, spin: 0.012, trail: 3.5, hot: 0.72 };
+// perRise: sparks per unit the beat pulse rises (only the moment of a kick throws them, not its fading
+// tail); burst: extra on a strong kick; trickle: per 60 fps frame while the bass is above trickleLevel
+const SPARKS = { max: 500, perRise: 16, burst: 12, trickle: 0.04, trickleLevel: 0.6, life: 0.018, drag: 0.985, speed: 1.6, spin: 0.012, trail: 3.5, hot: 0.72 };
 // A strong kick (the pulse reaching `strong` after dropping below `calm`) also sends out a shockwave
 const SHOCK = { max: 6, strong: 0.75, calm: 0.45, speed: 0.022, life: 0.03, alpha: 0.7, width: 5 };
 // Peak marks hold at the highest level, then fall faster and faster (per 60 fps frame)
@@ -67,6 +69,7 @@ export class SpectrumView {
   // artwork's half size, and how much is left), and each band's peak (LED and ring)
   private sparks = newSparks();
   private spawnDebt = 0;
+  private lastPulse = 0;
   private shocks: Array<{ size: number; life: number }> = [];
   private shockArmed = true;
   private peaks = new Peaks(BANDS);
@@ -99,6 +102,7 @@ export class SpectrumView {
     this.dirty = true;
     this.sparks.n = 0;
     this.spawnDebt = 0;
+    this.lastPulse = 0;
     this.shocks = [];
     this.shockArmed = true;
     this.peaks = new Peaks(BANDS);
@@ -259,7 +263,10 @@ export class SpectrumView {
       this.spawnDebt += SPARKS.burst;
     }
     // Kicks throw a burst; a loud bass keeps a light trickle going
-    this.spawnDebt += (pulse * SPARKS.perKick + (level > 0.3 ? 0.5 : 0)) * step;
+    if (step) {
+      this.spawnDebt += Math.max(0, pulse - this.lastPulse) * SPARKS.perRise + (level > SPARKS.trickleLevel ? SPARKS.trickle * step : 0);
+      this.lastPulse = pulse;
+    }
     for (; this.spawnDebt >= 1 && s.n < SPARKS.max; this.spawnDebt--) {
       const k = Math.floor(Math.random() * x.length), i = s.n++;
       const speed = (1 + Math.random() * 4) * (0.5 + pulse) * SPARKS.speed * dpr, turn = (Math.random() - 0.5) * 0.8;
