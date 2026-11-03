@@ -27,6 +27,9 @@ export class SpectrumView {
   private g: CanvasRenderingContext2D;
   private cssWidth = 0;
   private cssHeight = 0;
+  // Where the artwork sits on the canvas (CSS pixels): its centre, and half its size without the tilt
+  // and beat transforms
+  private coverAt = { cx: 0, cy: 0, half: 0 };
   private opacity = 0;
   private dirty = true;
   private lastColor = '';
@@ -44,12 +47,22 @@ export class SpectrumView {
 
   constructor(private canvas: HTMLCanvasElement, private cover: HTMLElement, private audio: AudioAnalyser, private accent: () => string) {
     this.g = canvas.getContext('2d')!;
-    this.resize = new ResizeObserver(([entry]) => {
-      this.cssWidth = entry.contentRect.width;
-      this.cssHeight = entry.contentRect.height;
-      this.dirty = true;
-    });
+    // Sizes and the artwork's place are read only here, when something in the player changes size:
+    // the layout is already up to date then, so reading it costs nothing. Reading it every frame
+    // would make the browser lay out all of Nuclear's page again each time.
+    this.resize = new ResizeObserver(() => { this.measure(); this.dirty = true; });
     this.resize.observe(canvas);
+    this.resize.observe(cover);
+    // The artwork also moves when the panels beside it (lyrics) appear or change size
+    const stage = cover.closest('.stage');
+    if (stage) for (const part of Array.from(stage.children)) this.resize.observe(part);
+  }
+
+  private measure() {
+    const box = this.cover.getBoundingClientRect(), area = this.canvas.getBoundingClientRect();
+    this.cssWidth = area.width;
+    this.cssHeight = area.height;
+    this.coverAt = { cx: box.left + box.width / 2 - area.left, cy: box.top + box.height / 2 - area.top, half: this.cover.offsetWidth / 2 };
   }
 
   get visible() { return this.mode !== 'off'; }
@@ -234,14 +247,11 @@ export class SpectrumView {
     });
   }
 
-  // Where the artwork sits on the canvas (canvas pixels): its centre, half its size without the
-  // tilt and beat transforms, and the canvas size
+  // coverAt and the canvas size in canvas pixels
   private coverBox(dpr: number) {
-    const half = (this.cover.offsetWidth / 2) * dpr;
+    const { cx, cy, half } = this.coverAt;
     if (!half) return null;
-    const box = this.cover.getBoundingClientRect(), area = this.canvas.getBoundingClientRect();
-    const cx = (box.left + box.width / 2 - area.left) * dpr, cy = (box.top + box.height / 2 - area.top) * dpr;
-    return { cx, cy, half, w: area.width * dpr, h: area.height * dpr };
+    return { cx: cx * dpr, cy: cy * dpr, half: half * dpr, w: this.cssWidth * dpr, h: this.cssHeight * dpr };
   }
 
   // Wave heights: bass at both edges and treble in the middle, with a light blur across

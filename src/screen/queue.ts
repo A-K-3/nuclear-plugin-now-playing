@@ -15,6 +15,8 @@ const PREFS_KEY = 'npx-queue';
 const DEFAULT_WIDTH = 340;
 const MIN_WIDTH = 240;
 const MAX_WIDTH = 720;
+// Bars beside the playing track's title
+const EQ = '<span class="eq"><i></i><i></i><i></i></span>';
 
 export class QueuePanel {
   private prefs = storage.get(PREFS_KEY, { width: DEFAULT_WIDTH, collapsed: false });
@@ -23,6 +25,7 @@ export class QueuePanel {
   private lastCur = -1;
   private upcomingSecs = 0; // total duration of the songs after the current one
   private dragFrom = -1;
+  private pending = 0;
   private el;
 
   constructor(
@@ -47,7 +50,13 @@ export class QueuePanel {
   get saveOpen() { return this.el.save.classList.contains('show'); }
 
   // Forces the next render to rebuild the list (the screen was closed meanwhile)
-  reset() { this.lastKey = ''; this.lastCur = -1; }
+  reset() { this.lastKey = ''; this.lastCur = -1; cancelAnimationFrame(this.pending); this.pending = 0; }
+
+  // Renders once on the next frame however many queue updates arrive before it (Nuclear sends a
+  // burst of them on each track change)
+  scheduleRender() {
+    if (!this.pending) this.pending = requestAnimationFrame(() => { this.pending = 0; this.render(); });
+  }
 
   // "X / N · time left" counter: cheap, also refreshed on every playback event
   renderCount() {
@@ -62,10 +71,17 @@ export class QueuePanel {
     const { items, currentIndex: cur } = this.state.queue;
     this.upcomingSecs = items.slice(cur + 1).reduce((s, it) => s + (it.track?.durationMs || 0) / 1000, 0);
     this.renderCount();
-    const key = JSON.stringify([cur, this.filter, items.map((i) => [i.id, i.status])]);
-    if (key === this.lastKey && !forceScroll) return;
+    // The rows are rebuilt only when what they show changes: the order, the filter or which items
+    // failed. Nuclear sends several queue updates per track (stream status changes) that change none
+    // of these, and a new current track only moves the marks between the rows already there.
+    const key = JSON.stringify([this.filter, items.map((i) => (i.status === 'error' ? `!${i.id}` : i.id))]);
     const curChanged = cur !== this.lastCur;
-    this.lastKey = key; this.lastCur = cur;
+    this.lastCur = cur;
+    if (key === this.lastKey && !forceScroll) {
+      if (curChanged) { this.markCurrent(cur); this.scrollToCurrent(); this.updateGoto(); }
+      return;
+    }
+    this.lastKey = key;
     this.infos.prune(items);
     let shown = 0;
     const rows = items.map((it, i) => {
@@ -73,7 +89,7 @@ export class QueuePanel {
       if (ok) shown++;
       const failed = it.status === 'error';
       const cls = [i === cur ? 'current' : '', i < cur ? 'played' : '', failed ? 'err' : '', ok ? '' : 'hidden'].join(' ');
-      const eq = i === cur ? '<span class="eq"><i></i><i></i><i></i></span>' : '';
+      const eq = i === cur ? EQ : '';
       const dur = it.track?.durationMs ? fmt(it.track.durationMs / 1000) : '';
       return `<li class="${cls}" data-i="${i}" data-id="${esc(it.id)}" draggable="true">
         <img src="${esc(info.thumb)}" loading="lazy" alt="">
@@ -140,6 +156,18 @@ export class QueuePanel {
     const i = needle ? raw.toLowerCase().indexOf(needle) : -1;
     if (i < 0) return esc(raw);
     return esc(raw.slice(0, i)) + `<mark>${esc(raw.slice(i, i + needle.length))}</mark>` + esc(raw.slice(i + needle.length));
+  }
+
+  // Moves the "current" and "played" marks and the playing bars to the new current row
+  private markCurrent(cur: number) {
+    for (const li of Array.from(this.el.list.children) as HTMLElement[]) {
+      if (!li.dataset.i) continue;
+      const i = +li.dataset.i;
+      li.classList.toggle('current', i === cur);
+      li.classList.toggle('played', i < cur);
+    }
+    this.el.list.querySelector('.eq')?.remove();
+    this.el.list.querySelector(`li[data-i="${cur}"] .t b`)?.insertAdjacentHTML('afterbegin', EQ);
   }
 
   private currentRow() { return this.el.list.querySelector<HTMLElement>('.current:not(.hidden)'); }

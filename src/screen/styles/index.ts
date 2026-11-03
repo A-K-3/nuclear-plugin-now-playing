@@ -10,7 +10,7 @@ import overlays from './overlays';
 import queue from './queue';
 import responsive from './responsive';
 
-export { ROOT_ID } from './root';
+export { COVERING_CLASS, ROOT_ID } from './root';
 
 export const CSS = [
   base,

@@ -25,14 +25,17 @@ ${R} .list { position:relative; list-style:none; overflow-y:auto; padding:0 12px
 ${R} .list li { display:grid; grid-template-columns:46px 1fr auto; gap:12px; align-items:center; padding:7px 10px; border-radius:10px;
   cursor:pointer; position:relative; }
 ${R} .list li:hover { background:rgba(255,255,255,.07); }
+/* Rows out of view are skipped when laying out and painting (thousands with a long queue) */
+${R} .list li { content-visibility:auto; contain-intrinsic-size:auto 60px; }
 ${R} .list li.current { background:rgba(var(--tint),.45); box-shadow:inset 3px 0 0 var(--accent); }
 ${R} .list li.played { opacity:.4; }
 ${R} .list li.hidden { display:none; }
 ${R} .list li.dragging { opacity:.3; }
 ${R} .list li.drop-before::before, ${R} .list li.drop-after::after { content:""; position:absolute; left:8px; right:8px; height:2px;
   background:var(--accent); border-radius:2px; }
-${R} .list li.drop-before::before { top:-1px; }
-${R} .list li.drop-after::after { bottom:-1px; }
+/* Inside the row: anything outside it would be clipped by content-visibility */
+${R} .list li.drop-before::before { top:0; }
+${R} .list li.drop-after::after { bottom:0; }
 ${R} .list img { width:46px; height:46px; border-radius:6px; object-fit:cover; background:var(--faint); }
 ${R} .list .t { min-width:0; }
 ${R} .list .t b, ${R} .list .t span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -47,10 +50,11 @@ ${R} .list li:hover .dur { visibility:hidden; }
 ${R} .list .err .t span { color:#ff8a80; }
 ${R} .list .empty-search { padding:20px 10px; color:var(--dim); font-size:14px; text-align:center; cursor:default; display:block; }
 ${R} .eq { display:inline-flex; gap:2px; align-items:flex-end; height:11px; margin-right:6px; }
-${R} .eq i { width:3px; background:var(--accent); animation:npx-eq 1s ease-in-out infinite; }
+/* Scaled, not resized: a height animation would lay out the whole list again every frame */
+${R} .eq i { width:3px; height:11px; background:var(--accent); transform-origin:bottom; animation:npx-eq 1s ease-in-out infinite; }
 ${R} .eq i:nth-child(2) { animation-delay:-.4s; } ${R} .eq i:nth-child(3) { animation-delay:-.7s; }
 ${R}.paused .eq i { animation-play-state:paused; }
-@keyframes npx-eq { 0%,100% { height:3px } 50% { height:11px } }
+@keyframes npx-eq { 0%,100% { transform:scaleY(.27) } 50% { transform:none } }
 ${R} .goto { position:absolute; left:50%; bottom:16px; transform:translate(-50%, 10px); opacity:0; pointer-events:none;
   display:flex; align-items:center; gap:6px; padding:7px 14px 7px 10px; border-radius:999px; min-width:0;
   background:var(--accent); color:#000; font-size:13px; font-weight:600; transition:opacity .25s, transform .25s; }

@@ -23,7 +23,7 @@ import { LyricsPanel } from './lyrics';
 import { createQuickSettings } from './quick-settings';
 import { QueuePanel } from './queue';
 import { PlayerState } from './state';
-import { CSS, ROOT_ID } from './styles/index';
+import { COVERING_CLASS, CSS, ROOT_ID } from './styles/index';
 import { queryIn, restartAnimation, setOn, template } from './template';
 import { UpNext } from './up-next';
 import { SpectrumView } from './visualizer';
@@ -300,6 +300,15 @@ export function createScreen(api: NuclearPluginAPI) {
     if (session) return;
     const scope = session = new Scope();
     root.classList.add('open');
+    // Nuclear's own page is covered: let the browser skip styling, laying out and painting it (with a
+    // long queue it is thousands of elements). Once the screen has faded in; shown again on close.
+    const cover = (e: AnimationEvent) => {
+      if (e.target !== root) return;
+      document.documentElement.classList.add(COVERING_CLASS);
+      root.removeEventListener('animationend', cover);
+    };
+    root.addEventListener('animationend', cover);
+    scope.add(() => { root.removeEventListener('animationend', cover); document.documentElement.classList.remove(COVERING_CLASS); });
     root.scrollTop = 0;
     queue.reset(); controls.reset(); lastCurrentId = null;
     controls.refreshModes();
@@ -316,7 +325,7 @@ export function createScreen(api: NuclearPluginAPI) {
       .then((custom) => { if (scope.active) root.classList.toggle('custom-titlebar', !!custom && appWindow.available); })
       .catch(() => {});
     renderTrack(); queue.render(true);
-    scope.add(api.Queue.subscribe((qu) => { state.queue = qu; renderTrack(); queue.render(); }));
+    scope.add(api.Queue.subscribe((qu) => { state.queue = qu; renderTrack(); queue.scheduleRender(); }));
     scope.add(api.Playback.subscribe((s) => { onPlayback(s); queue.renderCount(); }));
     try { scope.add(api.Favorites.subscribe(() => refreshFav())); } catch { /* favorites unavailable */ }
     scope.interval(() => controls.refreshModes(), MODES_POLL_MS);

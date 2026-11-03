@@ -80,5 +80,11 @@ export function installFakeHost() {
     };
   };
 
-  Object.assign(window, { fakeHost: { api, calls, settings, subscriptions, load } });
+  // Nuclear moving to another track: a new queue object with another current index
+  const setCurrent = (index: number) => {
+    queue.currentIndex = index;
+    listeners.queue.forEach((fn) => fn({ ...queue } as never));
+  };
+
+  Object.assign(window, { fakeHost: { api, calls, settings, subscriptions, load, setCurrent } });
 }
