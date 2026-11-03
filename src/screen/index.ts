@@ -8,7 +8,7 @@ import { AudioAnalyser } from '../audio/analyser';
 import { locale, t } from '../i18n';
 import { frameStep } from '../lib/math';
 import { Scope } from '../lib/scope';
-import { display } from '../lib/track';
+import { coverFor, display } from '../lib/track';
 import { appWindow, onDragRegionMouseDown } from '../nuclear/window';
 import type { Prefs } from '../settings';
 import { isAction, type Action } from './actions';
@@ -55,7 +55,8 @@ export function createScreen(api: NuclearPluginAPI) {
   const infos = new ItemInfoCache();
   const audio = new AudioAnalyser();
   const artwork = new Artwork(root, q, () => effects.flip());
-  const view = new SpectrumView(q<HTMLCanvasElement>('.viz'), q('.cover-wrap'), audio, () => artwork.accent);
+  const view = new SpectrumView(q<HTMLCanvasElement>('.viz'), q('.cover-wrap'), audio, () => artwork,
+    [q('.info'), q('.lyrics')]);
   const effects = new Effects({
     wrap: q('.cover-wrap'), cover: q('.cover'), glow: q('.cover-glow'), shine: q('.shine i'),
     flash: q('.pulse'), backdrop: q('.backdrop'), info: q('.info'),
@@ -68,6 +69,8 @@ export function createScreen(api: NuclearPluginAPI) {
     never: ['.timeline', '.dock', '.back', '.clock', '.corner', '.upnext', '.settings-panel'].map((s) => q(s)),
     ifRoom: ['.cover-wrap', '.info'].map((s) => q(s)),
   }, (text) => (el.status.textContent = text ? `💬 ${text}` : ''));
+  // A comment going away bursts into sparks
+  comments.onGone = (rect) => view.popAt(rect);
   const quickSettings = createQuickSettings(q('.settings-panel'), api, (px) => root.style.setProperty('--blur', `${px}px`));
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
@@ -89,6 +92,7 @@ export function createScreen(api: NuclearPluginAPI) {
   function renderTrack() {
     const item = state.current, track = item?.track, d = display(track);
     artwork.show(track);
+    view.setArtwork(coverFor(track, true));
     el.title.textContent = track ? d.title : t('nothingPlaying');
     el.artist.textContent = d.artist;
     el.album.textContent = track?.album?.title || '';
@@ -228,12 +232,14 @@ export function createScreen(api: NuclearPluginAPI) {
     // The screen is fixed to the viewport, so the viewport size maps the cursor to -1…1
     pointerInside = true;
     effects.point((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1);
+    view.pointer(e.clientX, e.clientY);
     wake();
   });
   // Cursor gone to another monitor or window: ease the artwork back to straight
   root.addEventListener('mouseleave', () => {
     pointerInside = false;
     effects.point(0, 0);
+    view.pointer(null);
   });
 
   const tickClock = () => { el.clock.textContent = new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }); };
@@ -257,6 +263,7 @@ export function createScreen(api: NuclearPluginAPI) {
     root.classList.toggle('animated', p.animatedBg);
     root.classList.toggle('show-clock', p.clock);
     view.setMode(p.visualizer);
+    view.setSparks(p.sparkStyle, p.sparkAmount);
     applyMotion();
     comments.setEnabled(p.comments);
     if (session && p.comments && !prev?.comments) comments.load(state.current?.track);
@@ -270,7 +277,7 @@ export function createScreen(api: NuclearPluginAPI) {
     ['lyrics', () => { if (showLyrics) lyrics.update(pos); }],
     ['comments', () => comments.update(pos, state.playing)],
     ['audio', () => audio.update(state.playing, dt)], // levels read by the visualizer and the effects
-    ['visualizer', () => view.draw(state.playing, dt)],
+    ['visualizer', () => view.draw(state.playing, dt, state.duration ? state.duration - pos : Infinity)],
     // Float only while the cursor rests over the screen; with the cursor elsewhere the artwork stays straight
     ['effects', () => effects.update(now, dt, idle && pointerInside)],
     ['up next', () => upNext.update(pos)],

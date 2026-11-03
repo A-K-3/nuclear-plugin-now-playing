@@ -44,6 +44,8 @@ export class CommentBubbles {
   private taken: (Box & { until: number })[] = [];
   // The next bubble, built and measured once and kept (hidden) until it finds a spot
   private next: { c: TimedComment; el: HTMLElement } | null = null;
+  // Called with a bubble's place on screen as it goes away
+  onGone: ((rect: DOMRect) => void) | null = null;
 
   // `avoid.never`: parts bubbles must never cover (controls, buttons…). `avoid.ifRoom`: parts they keep
   // clear of while there is space elsewhere (artwork, title); on small windows they may go over them.
@@ -151,7 +153,10 @@ export class CommentBubbles {
     el.style.visibility = '';
     this.next = null;
     this.taken.push({ ...spot, until: now + BUBBLE_MS });
-    setTimeout(() => el.remove(), BUBBLE_MS);
+    setTimeout(() => {
+      if (this.onGone && el.isConnected) this.onGone(el.getBoundingClientRect());
+      el.remove();
+    }, BUBBLE_MS);
     return true;
   }
 

@@ -10,6 +10,7 @@ const NEUTRAL_TINT = '40, 40, 48';
 
 export class Artwork {
   accent = '#fff';
+  tint = NEUTRAL_TINT;
   private front: 'A' | 'B' = 'A';
   private token = 0;
   private lastUrl: string | null = null;
@@ -50,6 +51,7 @@ export class Artwork {
 
   private setAccent(accent: string, tint: string) {
     this.accent = accent;
+    this.tint = tint;
     this.root.style.setProperty('--accent', accent);
     this.root.style.setProperty('--tint', tint);
   }

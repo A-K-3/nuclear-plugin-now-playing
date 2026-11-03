@@ -28,6 +28,9 @@ ${R} .srow-line { display:flex; align-items:center; justify-content:space-betwee
 /* Visualizer: on/off switch, and its modes below only while on */
 ${R} .viz-row.off { gap:0; }
 ${R} .viz-row.off .seg { display:none; }
+/* Sparks: style and amount, only with that mode */
+${R} .spark-opts { display:none; flex-direction:column; gap:6px; margin-top:4px; font-size:12.5px; color:var(--dim); }
+${R} .viz-row.sparks:not(.off) .spark-opts { display:flex; }
 ${R} .srow b { font-weight:600; color:var(--dim); font-variant-numeric:tabular-nums; }
 ${R} .switch { flex:none; width:38px; height:22px; padding:0; border-radius:999px; background:rgba(255,255,255,.16); opacity:1; }
 ${R} .switch::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff;

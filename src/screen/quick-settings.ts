@@ -6,7 +6,7 @@ import type { NuclearPluginAPI } from '@nuclearplayer/plugin-sdk';
 import { t } from '../i18n';
 import { esc } from '../lib/format';
 import { storage } from '../lib/storage';
-import { BLUR_RANGE, DEFAULTS, VISUALIZER_MODES, type Prefs } from '../settings';
+import { BLUR_RANGE, DEFAULTS, SPARK_AMOUNTS, SPARK_STYLES, VISUALIZER_MODES, type Prefs } from '../settings';
 
 type ToggleKey = 'effects' | 'animatedBg' | 'clock' | 'comments';
 
@@ -29,6 +29,12 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
     <div class="srow col viz-row">
       <div class="srow-line"><span>${esc(t('setVisualizer'))}</span><button class="switch" data-viz-switch role="switch"></button></div>
       <div class="seg">${MODES.map(([v, label]) => `<button data-viz="${v}">${esc(t(label))}</button>`).join('')}</div>
+      <div class="spark-opts">
+        <span>${esc(t('setSparkStyle'))}</span>
+        <div class="seg">${SPARK_STYLES.map(([v, label]) => `<button data-pick="sparkStyle" data-value="${v}">${esc(t(label))}</button>`).join('')}</div>
+        <span>${esc(t('setSparkAmount'))}</span>
+        <div class="seg">${SPARK_AMOUNTS.map(([v, label]) => `<button data-pick="sparkAmount" data-value="${v}">${esc(t(label))}</button>`).join('')}</div>
+      </div>
     </div>
     <div class="srow col"><span>${esc(t('setBlur'))} <b class="blur-value"></b></span>
       <input type="range" min="${BLUR_RANGE.min}" max="${BLUR_RANGE.max}" step="${BLUR_RANGE.step}" class="blur-range"></div>`;
@@ -38,9 +44,10 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
   panel.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     const toggle = target.closest<HTMLElement>('[data-set]');
-    const viz = target.closest<HTMLElement>('[data-viz]');
+    const viz = target.closest<HTMLElement>('[data-viz]'), pick = target.closest<HTMLElement>('[data-pick]');
     if (toggle && prefs) api.Settings.set(toggle.dataset.set!, !prefs[toggle.dataset.set as ToggleKey]);
     else if (viz) api.Settings.set('visualizer', viz.dataset.viz!);
+    else if (pick) api.Settings.set(pick.dataset.pick!, pick.dataset.value!);
     else if (target.closest('[data-viz-switch]') && prefs) {
       if (prefs.visualizer === 'off') api.Settings.set('visualizer', storage.get(LAST_VIZ_KEY, { mode: DEFAULTS.visualizer }).mode);
       else {
@@ -68,6 +75,9 @@ export function createQuickSettings(panel: HTMLElement, api: NuclearPluginAPI, o
       const vizOn = p.visualizer !== 'off';
       setSwitch('[data-viz-switch]', vizOn);
       panel.querySelector('.viz-row')!.classList.toggle('off', !vizOn);
+      panel.querySelector('.viz-row')!.classList.toggle('sparks', p.visualizer === 'particles');
+      panel.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) =>
+        b.classList.toggle('on', p[b.dataset.pick as 'sparkStyle' | 'sparkAmount'] === b.dataset.value));
       panel.querySelectorAll<HTMLElement>('[data-viz]').forEach((b) => b.classList.toggle('on', b.dataset.viz === p.visualizer));
       if (document.activeElement !== range) range.value = String(p.blur);
       panel.querySelector('.blur-value')!.textContent = `${p.blur} px`;

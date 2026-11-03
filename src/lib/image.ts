@@ -42,6 +42,23 @@ function accentFrom(img: HTMLImageElement): Colors | null {
   }
 }
 
+// The artwork scaled down to n × n pixels, as CSS colours row by row; null when it cannot be read
+export async function coverPixels(url: string, n: number): Promise<string[] | null> {
+  const im = await loadImage(url, !url.startsWith('data:'));
+  if (!im) return null;
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = n;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(im, 0, 0, n, n);
+    const d = ctx.getImageData(0, 0, n, n).data, out: string[] = [];
+    for (let i = 0; i < d.length; i += 4) out.push(`rgb(${d[i]}, ${d[i + 1]}, ${d[i + 2]})`);
+    return out;
+  } catch {
+    return null; // CORS-tainted
+  }
+}
+
 // Accent colours for an artwork URL (data: URLs need no CORS)
 export async function coverColors(url: string) {
   const im = await loadImage(url, !url.startsWith('data:'));

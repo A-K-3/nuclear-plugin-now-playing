@@ -12,11 +12,16 @@ export const VISUALIZER_MODES: Array<[Prefs['visualizer'], Key]> = [
   ['ring', 'setVizRing'], ['particles', 'setVizParticles'], ['glow', 'setVizGlow'],
 ];
 
+export const SPARK_STYLES: Array<[Prefs['sparkStyle'], Key]> = [['burst', 'setSparkBurst'], ['fire', 'setSparkFire'], ['swarm', 'setSparkSwarm']];
+export const SPARK_AMOUNTS: Array<[Prefs['sparkAmount'], Key]> = [['low', 'setSparkLow'], ['normal', 'setSparkNormal'], ['high', 'setSparkHigh']];
+
 export type Prefs = {
   blur: number;
   effects: boolean;
   animatedBg: boolean;
   visualizer: 'off' | 'bars' | 'wave' | 'led' | 'ring' | 'particles' | 'glow';
+  sparkStyle: 'burst' | 'fire' | 'swarm';
+  sparkAmount: 'low' | 'normal' | 'high';
   clock: boolean;
   comments: boolean;
 };
@@ -26,6 +31,8 @@ export const DEFAULTS: Prefs = {
   effects: true,
   animatedBg: true,
   visualizer: 'wave',
+  sparkStyle: 'burst',
+  sparkAmount: 'normal',
   clock: false,
   comments: true,
 };
@@ -38,6 +45,10 @@ const definitions = (): SettingDefinition[] => [
   { category: CATEGORY, id: 'animatedBg', title: t('setAnimatedBg'), description: t('setAnimatedBgDesc'), kind: 'boolean', default: DEFAULTS.animatedBg },
   { category: CATEGORY, id: 'visualizer', title: t('setVisualizer'), kind: 'enum', default: DEFAULTS.visualizer, widget: { type: 'select' },
     options: VISUALIZER_MODES.map(([value, label]) => ({ value, label: t(label) })) },
+  { category: CATEGORY, id: 'sparkStyle', title: t('setSparkStyle'), kind: 'enum', default: DEFAULTS.sparkStyle, widget: { type: 'select' },
+    options: SPARK_STYLES.map(([value, label]) => ({ value, label: t(label) })) },
+  { category: CATEGORY, id: 'sparkAmount', title: t('setSparkAmount'), kind: 'enum', default: DEFAULTS.sparkAmount, widget: { type: 'select' },
+    options: SPARK_AMOUNTS.map(([value, label]) => ({ value, label: t(label) })) },
   { category: CATEGORY, id: 'clock', title: t('setClock'), kind: 'boolean', default: DEFAULTS.clock },
   { category: CATEGORY, id: 'comments', title: t('setComments'), description: t('setCommentsDesc'), kind: 'boolean', default: DEFAULTS.comments },
 ];
