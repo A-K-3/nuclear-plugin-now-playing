@@ -56,6 +56,8 @@ test('buttons and keyboard shortcuts reach Nuclear', async ({ page }) => {
   // Shortcuts follow the character typed, so they work on any keyboard layout
   await page.keyboard.press('q');
   await expect(page.locator('#npx-root')).toHaveClass(/qcollapsed/);
+  // The "go to current" button lives in the queue column: it must not peek out at the edge when folded
+  await expect(page.locator('#npx-root .goto')).toBeHidden();
   // Ctrl+key is left to the system
   await page.keyboard.press('Control+q');
   await expect(page.locator('#npx-root')).toHaveClass(/qcollapsed/);
