@@ -3,8 +3,10 @@ import type { Artwork, Track } from '@nuclearplayer/plugin-sdk';
 
 import { esc } from './format';
 
-// Words that name a version of a song rather than an artist ("… - Remix", "(sped up)")
-export const VERSION_WORDS = ['instrumental', 'remix', 'edit', 'mix', 'vip', 'extended', 'live', 'demo', 'radio edit', 'sped up', 'slowed'];
+// Words that name a version or a genre of a song rather than an artist ("… - Remix", "(sped up)",
+// "I'M GONNA SHOW YOU CRAZY - HARDSTYLE")
+export const VERSION_WORDS = ['instrumental', 'remix', 'edit', 'mix', 'vip', 'extended', 'live', 'demo', 'radio edit', 'sped up', 'slowed',
+  'hardstyle', 'hardtekk', 'tekk', 'frenchcore', 'phonk', 'nightcore', 'bootleg', 'reverb'];
 
 // "beansclub - crossroad" uploaded by a label → title "crossroad", artist "beansclub"
 const VERSION = new RegExp(`^(${VERSION_WORDS.join('|')})\\b`, 'i');
