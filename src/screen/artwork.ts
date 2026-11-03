@@ -2,7 +2,7 @@
 // colours taken from it (white until they are known, or when the image cannot be read).
 import type { Track } from '@nuclearplayer/plugin-sdk';
 
-import { coverColors } from '../lib/image';
+import { coverColors, type Colors } from '../lib/image';
 import { coverFor } from '../lib/track';
 import type { Query } from './template';
 
@@ -10,7 +10,8 @@ const NEUTRAL_TINT = '40, 40, 48';
 
 export class Artwork {
   accent = '#fff';
-  tint = NEUTRAL_TINT;
+  // The artwork's colours as numbers and its pixels (null until read); `version` changes with them
+  colors: { version: number; data: Colors | null } = { version: 0, data: null };
   private front: 'A' | 'B' = 'A';
   private token = 0;
   private lastUrl: string | null = null;
@@ -45,13 +46,13 @@ export class Artwork {
     };
     img.src = url;
     coverColors(url).then((colors) => {
-      if (token === this.token && colors) this.setAccent(colors.accent, colors.tint.join(', '));
+      if (token === this.token && colors) this.setAccent(colors.accent, colors.tint.join(', '), colors);
     });
   }
 
-  private setAccent(accent: string, tint: string) {
+  private setAccent(accent: string, tint: string, colors: Colors | null = null) {
     this.accent = accent;
-    this.tint = tint;
+    this.colors = { version: this.colors.version + 1, data: colors };
     this.root.style.setProperty('--accent', accent);
     this.root.style.setProperty('--tint', tint);
   }

@@ -4,11 +4,14 @@
 // background with the music. It fades in with a real signal and out without one, and skips
 // redrawing while nothing changes.
 import { BANDS, type AudioAnalyser } from '../audio/analyser';
-import { coverPixels } from '../lib/image';
+import type { Colors } from '../lib/image';
 import { clamp, ease, frames } from '../lib/math';
 import type { Prefs } from '../settings';
 import { roundedSquare } from './outline';
 import { SparkField, type Rect } from './sparks';
+
+// What the visualizer reads from the artwork (see Artwork)
+type ArtworkColors = { accent: string; colors: { version: number; data: Colors | null } };
 
 type Mode = Prefs['visualizer'];
 
@@ -18,8 +21,6 @@ const WAVE_POINTS = BANDS * 2 - 1;
 const AROUND_COVER: Mode[] = ['ring', 'particles', 'glow'];
 // The glow is soft anyway: drawn at a fraction of the resolution and scaled up by the browser
 const GLOW_RESOLUTION = 0.2;
-// A cursor still for this long no longer leads the sparks (as long as the screen takes to go idle)
-const POINTER_REST_MS = 3000;
 
 // peakMinRow: peak cells only from this row up (lower ones would only flicker)
 const LED = { cols: 32, rows: 14, hot: 0.8, warm: 0.6, hotColor: '#ff6b8b', warmColor: '#ffd166', offAlpha: 0.1, peakAlpha: 0.85, peakMinRow: 2 };
@@ -53,9 +54,9 @@ export class SpectrumView {
   private area = { left: 0, top: 0 };
   private avoidAt: Rect[] = [];
   private pointerAt: { x: number; y: number } | null = null;
-  private pointerMovedAt = 0;
-  private artworkUrl = '';
-  private artworkToken = 0;
+  private colorsVersion = -1;
+  private sparkOptions: { style: Prefs['sparkStyle']; amount: Prefs['sparkAmount']; reducedMotion: boolean } =
+    { style: 'burst', amount: 'normal', reducedMotion: false };
   private opacity = 0;
   private dirty = true;
   private lastColor = '';
@@ -73,7 +74,7 @@ export class SpectrumView {
 
   // `avoid`: what sparks dim over (title, lyrics)
   constructor(private canvas: HTMLCanvasElement, private cover: HTMLElement, private audio: AudioAnalyser,
-    private colors: () => { accent: string; tint: string }, private avoid: HTMLElement[]) {
+    private artwork: () => ArtworkColors, private avoid: HTMLElement[]) {
     this.g = canvas.getContext('2d')!;
     // Sizes and the artwork's place are read only here, when something in the player changes size:
     // the layout is already up to date then, so reading it costs nothing. Reading it every frame
@@ -97,23 +98,15 @@ export class SpectrumView {
       .map((r) => ({ x: r.left - area.left, y: r.top - area.top, w: r.width, h: r.height }));
   }
 
-  // Sparks: style and amount
-  setSparks(style: Prefs['sparkStyle'], amount: Prefs['sparkAmount']) { this.sparks.configure(style, amount); }
-
-  // The playing artwork, which the sparks draw at a song's drop (its pixels are read once per artwork)
-  setArtwork(url: string) {
-    if (url === this.artworkUrl) return;
-    this.artworkUrl = url;
-    const token = ++this.artworkToken;
-    this.sparks.setArtwork(null);
-    if (url) coverPixels(url, SparkField.ARTWORK_GRID).then((pixels) => { if (token === this.artworkToken) this.sparks.setArtwork(pixels); });
+  // Sparks: style and amount, and the system's reduce-motion setting
+  setSparks(options: Partial<SpectrumView['sparkOptions']>) {
+    this.sparkOptions = { ...this.sparkOptions, ...options };
+    const o = this.sparkOptions;
+    this.sparks.configure(o.style, o.amount, o.reducedMotion);
   }
 
-  // The cursor over the screen (viewport coordinates), or null when it left
-  pointer(x: number | null, y = 0) {
-    this.pointerAt = x === null ? null : { x: x - this.area.left, y: y - this.area.top };
-    this.pointerMovedAt = performance.now();
-  }
+  // The cursor over the screen (viewport coordinates), or null when it left or rests (screen idle)
+  pointer(x: number | null, y = 0) { this.pointerAt = x === null ? null : { x: x - this.area.left, y: y - this.area.top }; }
 
   // A SoundCloud comment bubble went away (viewport coordinates): it bursts into sparks
   popAt(r: DOMRect) {
@@ -142,11 +135,15 @@ export class SpectrumView {
     const target = this.audio.live ? 1 : 0;
     this.opacity += (target - this.opacity) * ease(FADE, dt);
     if (Math.abs(target - this.opacity) < 0.01) this.opacity = target;
-    const { accent: color, tint } = this.colors();
+    const art = this.artwork(), color = art.accent;
     // Nothing visible or nothing changing: skip the redraw (sparks in flight keep moving)
     const still = this.audio.settled && !this.dirty && (this.opacity === target) && !(playing && this.sparks.busy);
     if (still && (this.opacity === 0 || (!playing && color === this.lastColor))) return;
-    if (color !== this.lastColor) this.sparks.setColors(color, tint);
+    if (art.colors.version !== this.colorsVersion) {
+      this.colorsVersion = art.colors.version;
+      const c = art.colors.data;
+      this.sparks.setArtwork(c?.accentRgb ?? null, c?.tint ?? null, c);
+    }
     this.lastColor = color;
     this.dirty = false;
     const c = this.canvas;
@@ -274,12 +271,10 @@ export class SpectrumView {
   private drawSparks(dpr: number, dt: number, remaining: number) {
     const box = this.coverBox(dpr);
     if (!box) return;
-    const scale = (r: Rect) => ({ x: r.x * dpr, y: r.y * dpr, w: r.w * dpr, h: r.h * dpr });
-    // The cursor counts while it moves; resting, the sparks go back to the artwork
-    const p = performance.now() - this.pointerMovedAt < POINTER_REST_MS ? this.pointerAt : null;
+    const p = this.pointerAt;
     this.sparks.draw(this.g, {
-      box, dpr, opacity: this.opacity, step: frames(dt), pulse: this.audio.pulse, level: this.audio.level, spectrum: this.audio.spectrum,
-      remaining, avoid: this.avoidAt.map(scale), pointer: p ? { x: p.x * dpr, y: p.y * dpr } : null,
+      box, dpr, opacity: this.opacity, dt, pulse: this.audio.pulse, level: this.audio.level, spectrum: this.audio.spectrum,
+      remaining, avoid: this.avoidAt, pointer: p ? { x: p.x * dpr, y: p.y * dpr } : null,
     });
   }
 

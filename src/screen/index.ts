@@ -8,7 +8,7 @@ import { AudioAnalyser } from '../audio/analyser';
 import { locale, t } from '../i18n';
 import { frameStep } from '../lib/math';
 import { Scope } from '../lib/scope';
-import { coverFor, display } from '../lib/track';
+import { display } from '../lib/track';
 import { appWindow, onDragRegionMouseDown } from '../nuclear/window';
 import type { Prefs } from '../settings';
 import { isAction, type Action } from './actions';
@@ -68,9 +68,9 @@ export function createScreen(api: NuclearPluginAPI) {
   const comments = new CommentBubbles(api, q('.sc-layer'), q('.sc-markers'), {
     never: ['.timeline', '.dock', '.back', '.clock', '.corner', '.upnext', '.settings-panel'].map((s) => q(s)),
     ifRoom: ['.cover-wrap', '.info'].map((s) => q(s)),
-  }, (text) => (el.status.textContent = text ? `💬 ${text}` : ''));
+  }, (text) => (el.status.textContent = text ? `💬 ${text}` : ''),
   // A comment going away bursts into sparks
-  comments.onGone = (rect) => view.popAt(rect);
+  (rect) => view.popAt(rect));
   const quickSettings = createQuickSettings(q('.settings-panel'), api, (px) => root.style.setProperty('--blur', `${px}px`));
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
@@ -92,7 +92,6 @@ export function createScreen(api: NuclearPluginAPI) {
   function renderTrack() {
     const item = state.current, track = item?.track, d = display(track);
     artwork.show(track);
-    view.setArtwork(coverFor(track, true));
     el.title.textContent = track ? d.title : t('nothingPlaying');
     el.artist.textContent = d.artist;
     el.album.textContent = track?.album?.title || '';
@@ -222,7 +221,12 @@ export function createScreen(api: NuclearPluginAPI) {
   window.addEventListener('keydown', onKey, true);
 
   // --- Idle: hides the cursor and controls, and lets the artwork float ---
-  const setIdle = (value: boolean) => { idle = value; root.classList.toggle('idle', value); };
+  const setIdle = (value: boolean) => {
+    idle = value;
+    root.classList.toggle('idle', value);
+    // A resting cursor no longer leads the sparks
+    if (value) view.pointer(null);
+  };
   const wake = () => {
     setIdle(false);
     clearTimeout(idleTimer);
@@ -250,6 +254,7 @@ export function createScreen(api: NuclearPluginAPI) {
     const motion = !!prefs?.effects && !reducedMotion?.matches;
     root.classList.toggle('fx', motion);
     effects.setEnabled(motion);
+    view.setSparks({ reducedMotion: !!reducedMotion?.matches });
     // The analysis feeds both the visualizer and the beat effects
     audio.setActive(motion, view.visible);
   }
@@ -263,7 +268,7 @@ export function createScreen(api: NuclearPluginAPI) {
     root.classList.toggle('animated', p.animatedBg);
     root.classList.toggle('show-clock', p.clock);
     view.setMode(p.visualizer);
-    view.setSparks(p.sparkStyle, p.sparkAmount);
+    view.setSparks({ style: p.sparkStyle, amount: p.sparkAmount });
     applyMotion();
     comments.setEnabled(p.comments);
     if (session && p.comments && !prev?.comments) comments.load(state.current?.track);
