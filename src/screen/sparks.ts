@@ -56,9 +56,11 @@ const KICK = { strong: 0.75, calm: 0.45 };
 const SHOCK = { max: 6, speed: 0.022, life: 0.03, alpha: 0.7, width: 5 };
 const FIRE = { rate: 4, kick: 30, rise: 2.2, sway: 0.12, buoyancy: 0.012 };
 const SWARM = { population: 260, perFrame: 8, accel: 0.22, maxSpeed: 7, damping: 0.97, fade: 0.0035, scatter: 9, follow: 34 };
-// fast/slow: how quickly two loudness averages follow the music; a drop is the fast one at `ratio`
-// times the slow one and above `min`, on a strong kick, after warmUp frames, at most every cooldown
-const DROP = { fast: 0.12, slow: 0.004, ratio: 1.5, min: 0.35, warmUp: 360, cooldown: 900, burst: 90 };
+// fast/slow: how quickly two loudness averages follow the music. A drop, on a strong kick after
+// warmUp frames and at most every cooldown, is either the fast one jumping to `ratio` times the slow
+// one (and above `min`), or the music coming back (to `back` times the slow one) after a breakdown:
+// at least `breakdown` frames below `low` times the slow one, within `window` frames of coming back
+const DROP = { fast: 0.12, slow: 0.004, ratio: 1.35, min: 0.3, low: 0.65, breakdown: 120, back: 0.95, window: 180, warmUp: 360, cooldown: 900, burst: 90 };
 // The artwork made of sparks: one per pixel, `scale` times the artwork (its middle is behind the
 // artwork itself), flying in, holding `hold` frames, then blowing apart
 const FORM = { scale: 1.6, pull: 0.1, hold: 70, cell: 0.8, speed: 4, shard: 0.9 };
@@ -114,6 +116,8 @@ export class SparkField {
   private slowLoud = 0;
   private clock = 0;
   private lastDrop = -Infinity;
+  // Frames the music has been in a breakdown (well below its recent level)
+  private quietFor = 0;
   private fireworksDone = false;
   private lastPointer = { x: 0, y: 0, set: false };
 
@@ -169,6 +173,8 @@ export class SparkField {
     // Loudness now and over the last half minute or so
     this.fastLoud += (level - this.fastLoud) * ease(DROP.fast, dt);
     this.slowLoud += (level - this.slowLoud) * ease(DROP.slow, dt);
+    if (this.fastLoud < this.slowLoud * DROP.low) this.quietFor += step;
+    else if (this.fastLoud >= this.slowLoud * DROP.back) this.quietFor = Math.max(0, Math.min(this.quietFor, DROP.breakdown + DROP.window) - step);
     let strong = false;
     if (pulse < KICK.calm) this.kickArmed = true;
     else if (pulse >= KICK.strong && this.kickArmed) { this.kickArmed = false; strong = true; }
@@ -220,10 +226,11 @@ export class SparkField {
   private onStrongKick(f: SparkFrame) {
     if (this.shocks.length < SHOCK.max && this.style === 'burst') this.shocks.push({ size: 1, life: 1 });
     // The drop: the music jumping well above its recent level
-    const drop = this.clock > DROP.warmUp && this.clock - this.lastDrop > DROP.cooldown
-      && this.fastLoud > DROP.min && this.fastLoud > this.slowLoud * DROP.ratio;
-    if (!drop) return;
+    const jump = this.fastLoud > DROP.min && this.fastLoud > this.slowLoud * DROP.ratio;
+    const back = this.quietFor >= DROP.breakdown && this.fastLoud >= this.slowLoud * DROP.back;
+    if (!(jump || back) || this.clock < DROP.warmUp || this.clock - this.lastDrop < DROP.cooldown) return;
     this.lastDrop = this.clock;
+    this.quietFor = 0;
     if (this.artwork) this.formArtwork(f, this.artwork);
     else {
       for (let i = 0; i < DROP.burst; i++) this.throwFromEdge(f, this.all, DROP_THROW);
@@ -425,24 +432,46 @@ export class SparkField {
     return 1;
   }
 
-  // Outlines of the artwork running outwards, thinning and fading
+  // Outlines of the artwork running outwards, thinning and fading (dimmed over the title and lyrics)
   private drawShocks(g: CanvasRenderingContext2D, f: SparkFrame) {
     const { box, dpr } = f, step = frames(f.dt);
-    g.strokeStyle = this.palette[0];
     let kept = 0;
     for (const shock of this.shocks) {
       shock.size += SHOCK.speed * step * (1 + shock.life);
       shock.life -= SHOCK.life * step;
-      if (shock.life <= 0) continue;
-      this.shocks[kept++] = shock;
-      const h = box.half * shock.size;
-      g.globalAlpha = f.opacity * Math.min(1, shock.life) * SHOCK.alpha;
-      g.lineWidth = (1 + SHOCK.width * Math.min(1, shock.life)) * dpr;
-      g.beginPath();
-      g.roundRect(box.cx - h, box.cy - h, 2 * h, 2 * h, h * OUTLINE_CORNER);
-      g.stroke();
+      if (shock.life > 0) this.shocks[kept++] = shock;
     }
     this.shocks.length = kept;
+    if (!kept) return;
+    g.strokeStyle = this.palette[0];
+    this.dimmedOver(g, f, (alpha) => {
+      for (const shock of this.shocks) {
+        const h = box.half * shock.size;
+        g.globalAlpha = f.opacity * Math.min(1, shock.life) * SHOCK.alpha * alpha;
+        g.lineWidth = (1 + SHOCK.width * Math.min(1, shock.life)) * dpr;
+        g.beginPath();
+        g.roundRect(box.cx - h, box.cy - h, 2 * h, 2 * h, h * OUTLINE_CORNER);
+        g.stroke();
+      }
+    });
+  }
+
+  // Draws twice: at full strength outside the boxes to avoid, dimmed inside them
+  private dimmedOver(g: CanvasRenderingContext2D, f: SparkFrame, draw: (alpha: number) => void) {
+    if (!f.avoid.length) { draw(1); return; }
+    const boxes = new Path2D();
+    for (const r of f.avoid) boxes.rect(r.x * f.dpr, r.y * f.dpr, r.w * f.dpr, r.h * f.dpr);
+    const outside = new Path2D();
+    outside.rect(0, 0, f.box.w, f.box.h);
+    outside.addPath(boxes);
+    g.save();
+    g.clip(outside, 'evenodd');
+    draw(1);
+    g.restore();
+    g.save();
+    g.clip(boxes);
+    draw(AVOID_ALPHA);
+    g.restore();
   }
 
   // Small bursts of light where sparks fell back onto the artwork
