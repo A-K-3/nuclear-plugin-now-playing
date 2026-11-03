@@ -9,7 +9,7 @@ ${R} .queue > * { min-width:240px; }
 ${R} .queue .resizer { position:absolute; left:-5px; top:0; bottom:0; width:10px; min-width:0; cursor:col-resize; z-index:2; }
 ${R} .queue .resizer::after { content:""; position:absolute; left:4px; top:0; bottom:0; width:2px; background:var(--accent); opacity:0; transition:opacity .2s; }
 ${R} .queue .resizer:hover::after, ${R} .app.resizing .resizer::after { opacity:.6; }
-${R}.qcollapsed .queue .resizer { display:none; }
+${R}.qcollapsed .queue .resizer, ${R}.qcollapsed .goto { display:none; }
 ${R} .queue header { padding:20px 10px 10px 24px; display:flex; align-items:center; gap:6px; }
 ${R} .queue h2 { font-size:14px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
 ${R} .queue header .count { flex:1; font-size:12.5px; color:var(--dim); font-variant-numeric:tabular-nums; text-align:right; padding-right:4px;
