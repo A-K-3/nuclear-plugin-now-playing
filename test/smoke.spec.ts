@@ -16,11 +16,13 @@ type Host = {
 };
 declare const fakeHost: Host;
 
-async function start(page: Page) {
+// `before` runs in the page before the plugin loads (e.g. to stand in for Tauri)
+async function start(page: Page, before?: () => void) {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.setContent('<!doctype html><html><body></body></html>');
+  if (before) await page.evaluate(before);
   await page.evaluate(installFakeHost);
   await page.evaluate(async (code) => {
     fakeHost.plugin = fakeHost.load(code);
@@ -102,5 +104,53 @@ test('disabling removes everything', async ({ page }) => {
   // F9 does nothing once disabled
   await page.keyboard.press('F9');
   await expect(page.locator('#npx-root')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("batches Nuclear's queue saves and leaves other Tauri calls alone", async ({ page }) => {
+  type Bridge = { invoke(c: string, a?: Record<string, unknown>): Promise<unknown> };
+  // A Tauri bridge that records what reaches it; it must exist before the plugin loads
+  const errors = await start(page, () => {
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+    const internals = { invoke: async (command: string, args?: Record<string, unknown>) => { calls.push({ command, args }); return null; } };
+    Object.assign(window, { __TAURI_INTERNALS__: internals, tauriCalls: calls, tauriInvoke: internals.invoke });
+  });
+  // What Nuclear's queue store does after every change, several times in a row
+  await page.evaluate(async () => {
+    const bridge = (window as unknown as { __TAURI_INTERNALS__: Bridge }).__TAURI_INTERNALS__;
+    for (let i = 1; i <= 6; i++) {
+      await bridge.invoke('plugin:store|set', { rid: 7, key: 'queue.items', value: [i] });
+      await bridge.invoke('plugin:store|set', { rid: 7, key: 'queue.currentIndex', value: i });
+      await bridge.invoke('plugin:store|save', { rid: 7 });
+    }
+    await bridge.invoke('plugin:store|set', { rid: 3, key: 'theme', value: 'dark' }); // another store
+  });
+  const recorded = () => page.evaluate(() => (window as unknown as { tauriCalls: Array<{ command: string; args?: Record<string, unknown> }> }).tauriCalls
+    .filter((c) => c.command.startsWith('plugin:store')));
+  // Only the other store's write went through straight away
+  expect(await recorded()).toEqual([{ command: 'plugin:store|set', args: { rid: 3, key: 'theme', value: 'dark' } }]);
+  // Once things settle: one write of the latest values, then one save
+  await expect.poll(recorded, { timeout: 4000 }).toHaveLength(4);
+  expect((await recorded()).slice(1)).toEqual([
+    { command: 'plugin:store|set', args: { rid: 7, key: 'queue.items', value: [6] } },
+    { command: 'plugin:store|set', args: { rid: 7, key: 'queue.currentIndex', value: 6 } },
+    { command: 'plugin:store|save', args: { rid: 7 } },
+  ]);
+  // Disabling puts Tauri's own function back
+  await page.evaluate(() => fakeHost.plugin!.onDisable(fakeHost.api));
+  expect(await page.evaluate(() => {
+    const w = window as unknown as { __TAURI_INTERNALS__: Bridge; tauriInvoke: unknown };
+    return w.__TAURI_INTERNALS__.invoke === w.tauriInvoke;
+  })).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the queue search finds titles in any script', async ({ page }) => {
+  const errors = await start(page);
+  await page.keyboard.press('F9');
+  await page.keyboard.press('/');
+  await page.locator('#npx-root .qsearch input').fill('сломана');
+  await expect(page.locator('#npx-root .list li:not(.hidden)')).toHaveCount(1);
+  await expect(page.locator('#npx-root .list li:not(.hidden) .t b')).toContainText('Сломана');
   expect(errors).toEqual([]);
 });

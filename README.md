@@ -28,6 +28,7 @@ Big artwork, synced lyrics, SoundCloud timed comments and a live visualizer, des
 - **Double-click to play.** Double-click any track row in Nuclear (playlists, albums, search, favorites) to play it.
 - **Auto-skip.** Songs that fail to load are skipped automatically.
 - **Media keys.** Play, pause, next and previous from the keyboard or headphones go through Nuclear, so every view stays in sync. Track info and artwork show up in the OS media overlay.
+- **Smooth long queues.** Nuclear saves the whole queue to disk after every queue change, several times per song; with a long queue (playing a 1000-song playlist) that makes it stutter. The plugin batches those saves into one once things settle.
 - **English and Spanish.** The plugin follows Nuclear's language setting.
 
 <p align="center">
@@ -82,6 +83,7 @@ Change them from the gear button on the screen, or under **Settings → Now Play
 - **No official UI hooks.** Nuclear's plugin API has no way to add UI elements, so the player-bar button and double-click-to-play attach to Nuclear's interface directly. A future Nuclear update could break them. <kbd>F9</kbd> and the settings entry keep working either way.
 - **Visualizer signal.** The visualizer reads the playing `<audio>` element through `captureStream()`. When a stream cannot be captured, the bars fade out and a diagnostic message is written to the developer console.
 - **Lyrics provider required.** Lyrics need at least one lyrics plugin installed in Nuclear.
+- **Queue save batching.** The batching hooks into how Nuclear saves the queue (Tauri's store calls for `queue.json`). The latest queue is written about 1.5 seconds after it stops changing (at most 8 seconds later), when the window closes and when the plugin is disabled; if Nuclear is killed in that moment, the last few seconds of queue changes are lost. If a Nuclear update changes how the queue is saved, the batching simply stops applying. It does not change how Nuclear draws its own queue panel, which redraws every row on each change.
 
 ## License
 
