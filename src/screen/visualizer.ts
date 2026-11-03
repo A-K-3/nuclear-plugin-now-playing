@@ -20,7 +20,23 @@ const LED = { cols: 32, rows: 14, hot: 0.8, warm: 0.6, hotColor: '#ff6b8b', warm
 const RING = { bars: 128, gap: 10, maxLength: 0.42, width: 0.45 };
 // Corner radius of the outline the ring follows, as a share of the artwork's half size
 const RING_CORNER = 0.14;
-const SPARKS = { max: 400, perKick: 9, life: 0.012, drag: 0.985, speed: 1.6 };
+const SPARKS = { max: 500, perKick: 9, burst: 36, life: 0.012, drag: 0.985, speed: 1.6, spin: 0.012, trail: 3.5, hot: 0.72 };
+// A strong kick (the pulse reaching `strong` after dropping below `calm`) also sends out a shockwave
+const SHOCK = { max: 6, strong: 0.75, calm: 0.45, speed: 0.022, life: 0.03 };
+// Peak marks hold at the highest level, then fall faster and faster (per 60 fps frame)
+const PEAK_FALL = 0.0007;
+
+// The highest recent level of each band, falling slowly
+class Peaks {
+  readonly at: Float32Array;
+  private speed: Float32Array;
+  constructor(n: number) { this.at = new Float32Array(n); this.speed = new Float32Array(n); }
+  update(i: number, level: number, step: number) {
+    if (level >= this.at[i]) { this.at[i] = level; this.speed[i] = 0; return; }
+    this.speed[i] += PEAK_FALL * step;
+    this.at[i] = Math.max(level, this.at[i] - this.speed[i] * step);
+  }
+}
 
 export class SpectrumView {
   private mode: Mode = 'bars';
@@ -41,8 +57,13 @@ export class SpectrumView {
   private outline = roundedSquare(RING.bars, RING_CORNER);
   // Sparks: position, velocity, life and size, one slot each
   private sparks = { n: 0, x: new Float32Array(SPARKS.max), y: new Float32Array(SPARKS.max), vx: new Float32Array(SPARKS.max),
-    vy: new Float32Array(SPARKS.max), life: new Float32Array(SPARKS.max), r: new Float32Array(SPARKS.max) };
+    vy: new Float32Array(SPARKS.max), life: new Float32Array(SPARKS.max), r: new Float32Array(SPARKS.max), spin: new Float32Array(SPARKS.max) };
   private spawnDebt = 0;
+  // Shockwaves: how far out each is (share of the artwork's half size) and how much of it is left
+  private shocks: Array<{ size: number; life: number }> = [];
+  private shockArmed = true;
+  private ledPeaks = new Peaks(LED.cols);
+  private ringPeaks = new Peaks(RING.bars);
   private glowTime = 0;
 
   constructor(private canvas: HTMLCanvasElement, private cover: HTMLElement, private audio: AudioAnalyser, private accent: () => string) {
@@ -71,6 +92,7 @@ export class SpectrumView {
     this.mode = mode;
     this.dirty = true;
     this.sparks.n = 0;
+    this.shocks = [];
     this.canvas.style.display = mode === 'off' ? 'none' : '';
     this.canvas.classList.toggle('around', AROUND_COVER.includes(mode));
     this.canvas.classList.toggle('glow', mode === 'glow');
@@ -88,7 +110,7 @@ export class SpectrumView {
     if (Math.abs(target - this.opacity) < 0.01) this.opacity = target;
     const color = this.accent();
     // Nothing visible or nothing changing: skip the redraw (sparks in flight keep moving)
-    const still = this.audio.settled && !this.dirty && (this.opacity === target) && !(playing && this.sparks.n);
+    const still = this.audio.settled && !this.dirty && (this.opacity === target) && !(playing && (this.sparks.n || this.shocks.length));
     if (still && (this.opacity === 0 || (!playing && color === this.lastColor))) return;
     this.lastColor = color;
     this.dirty = false;
@@ -99,8 +121,8 @@ export class SpectrumView {
     switch (this.mode) {
       case 'bars': this.drawBars(w, h, dpr, color); break;
       case 'wave': this.drawWave(w, h, dpr, color); break;
-      case 'led': this.drawLed(w, h, dpr, color); break;
-      case 'ring': this.drawRing(dpr, color); break;
+      case 'led': this.drawLed(w, h, dpr, color, playing ? dt : 0); break;
+      case 'ring': this.drawRing(dpr, color, playing ? dt : 0); break;
       case 'particles': this.drawSparks(dpr, color, playing ? dt : 0); break;
       case 'glow': this.drawGlow(w, h, color, playing ? dt : 0); break;
     }
@@ -120,17 +142,23 @@ export class SpectrumView {
     }
   }
 
-  // A grid of lit cells, one colour at a time: unlit, the accent, and warmer near the top
-  private drawLed(w: number, h: number, dpr: number, color: string) {
-    const { g } = this, levels = this.audio.spectrum, { cols, rows } = LED;
+  // A grid of lit cells, one colour at a time: unlit, the accent, and warmer near the top. The highest
+  // cell of each column stays lit a moment and drops back slowly.
+  private drawLed(w: number, h: number, dpr: number, color: string, dt: number) {
+    const { g } = this, levels = this.audio.spectrum, { cols, rows } = LED, step = frames(dt);
     const gap = 3 * dpr, cw = (w - gap * (cols - 1)) / cols, ch = (h - gap * (rows - 1)) / rows;
     const lit = new Array<number>(cols);
-    for (let col = 0; col < cols; col++) lit[col] = Math.round(levels[Math.floor((col / cols) * BANDS)] * rows);
+    for (let col = 0; col < cols; col++) {
+      const level = levels[Math.floor((col / cols) * BANDS)];
+      lit[col] = Math.round(level * rows);
+      this.ledPeaks.update(col, level, step);
+    }
+    const cellY = (row: number) => h - (row + 1) * (ch + gap) + gap;
     const cells = (fill: string, alpha: number, from: number, to: number, on: boolean) => {
       g.beginPath();
       for (let col = 0; col < cols; col++) {
         for (let row = from; row < to; row++) {
-          if ((row < lit[col]) === on) g.rect(col * (cw + gap), h - (row + 1) * (ch + gap) + gap, cw, ch);
+          if ((row < lit[col]) === on) g.rect(col * (cw + gap), cellY(row), cw, ch);
         }
       }
       g.fillStyle = fill;
@@ -142,6 +170,15 @@ export class SpectrumView {
     cells(color, 1, 0, warm, true);
     cells(LED.warmColor, 1, warm, hot, true);
     cells(LED.hotColor, 1, hot, rows, true);
+    // Peak cells, above the lit ones (not at the bottom, where they would only flicker)
+    g.beginPath();
+    for (let col = 0; col < cols; col++) {
+      const row = Math.min(rows - 1, Math.round(this.ledPeaks.at[col] * rows));
+      if (row >= 2 && row >= lit[col]) g.rect(col * (cw + gap), cellY(row), cw, ch);
+    }
+    g.fillStyle = '#fff';
+    g.globalAlpha = this.opacity * 0.85;
+    g.fill();
   }
 
   private drawWave(w: number, h: number, dpr: number, color: string) {
@@ -171,62 +208,115 @@ export class SpectrumView {
   }
 
   // Bars standing out of the artwork's edges: bass at the top, treble at the bottom, mirrored left
-  // and right. The outline grows with the artwork on the kicks.
-  private drawRing(dpr: number, color: string) {
+  // and right. The outline grows with the artwork on the kicks, which also brighten its glow, and a
+  // dot past each bar marks its recent peak.
+  private drawRing(dpr: number, color: string, dt: number) {
     const box = this.coverBox(dpr);
     if (!box) return;
-    const { g } = this, levels = this.audio.spectrum, { x, y, dx, dy } = this.outline, n = RING.bars;
+    const { g } = this, levels = this.audio.spectrum, { x, y, dx, dy } = this.outline, n = RING.bars, step = frames(dt);
     const half = box.half * (1 + this.audio.pulse * 0.035) + RING.gap * dpr, longest = box.half * RING.maxLength;
-    g.beginPath();
+    const bars = new Path2D(), peaks = new Path2D(), dot = 1.6 * dpr;
     for (let k = 0; k < n; k++) {
       const band = Math.min(BANDS - 1, Math.round((Math.min(k, n - k) / (n / 2)) * (BANDS - 1)));
       const bx = box.cx + x[k] * half, by = box.cy + y[k] * half;
-      // Each bar stops short of the canvas edge it points at
-      const room = Math.min(dx[k] > 0 ? (box.w - bx) / dx[k] : dx[k] < 0 ? -bx / dx[k] : Infinity,
-        dy[k] > 0 ? (box.h - by) / dy[k] : dy[k] < 0 ? -by / dy[k] : Infinity) - 4 * dpr;
-      const len = 2 * dpr + levels[band] * clamp(room, 0, longest);
-      g.moveTo(bx, by);
-      g.lineTo(bx + dx[k] * len, by + dy[k] * len);
+      // Each bar (and its peak dot) stops short of the canvas edge it points at
+      const room = clamp(Math.min(dx[k] > 0 ? (box.w - bx) / dx[k] : dx[k] < 0 ? -bx / dx[k] : Infinity,
+        dy[k] > 0 ? (box.h - by) / dy[k] : dy[k] < 0 ? -by / dy[k] : Infinity) - 10 * dpr, 0, longest);
+      const len = 2 * dpr + levels[band] * room;
+      bars.moveTo(bx, by);
+      bars.lineTo(bx + dx[k] * len, by + dy[k] * len);
+      this.ringPeaks.update(k, levels[band], step);
+      if (this.ringPeaks.at[k] > 0.04) {
+        const peak = 6 * dpr + this.ringPeaks.at[k] * room, px = bx + dx[k] * peak, py = by + dy[k] * peak;
+        peaks.moveTo(px + dot, py);
+        peaks.arc(px, py, dot, 0, Math.PI * 2);
+      }
     }
+    const width = Math.max(1.5, ((8 * half) / n) * RING.width / dpr);
     g.lineCap = 'round';
-    this.glowStroke(color, dpr, Math.max(1.5, ((8 * half) / n) * RING.width / dpr));
+    g.strokeStyle = color;
+    // Glow under the bars (a wide faint stroke), stronger on the kicks
+    g.globalAlpha = this.opacity * (0.22 + this.audio.pulse * 0.35);
+    g.lineWidth = (width + 6) * dpr;
+    g.stroke(bars);
+    g.globalAlpha = this.opacity;
+    g.lineWidth = width * dpr;
+    g.stroke(bars);
+    g.fillStyle = '#fff';
+    g.globalAlpha = this.opacity * 0.8;
+    g.fill(peaks);
   }
 
-  // Sparks thrown out from the artwork's edges on each kick, slowing and fading as they go
+  // Sparks thrown out from the artwork's edges on each kick: born white hot, they take the accent as
+  // they cool, leave a streak behind, curl a little and fade. Strong kicks throw a bigger burst and
+  // a shockwave in the artwork's shape.
   private drawSparks(dpr: number, color: string, dt: number) {
     const box = this.coverBox(dpr);
     if (!box) return;
-    const s = this.sparks, { x, y, dx, dy } = this.outline, step = frames(dt);
+    const s = this.sparks, { x, y, dx, dy } = this.outline, step = frames(dt), { pulse, level } = this.audio;
+    if (pulse < SHOCK.calm) this.shockArmed = true;
+    else if (step && pulse >= SHOCK.strong && this.shockArmed) {
+      this.shockArmed = false;
+      if (this.shocks.length < SHOCK.max) this.shocks.push({ size: 1, life: 1 });
+      this.spawnDebt += SPARKS.burst;
+    }
     // Kicks throw a burst; a loud bass keeps a light trickle going
-    this.spawnDebt += (this.audio.pulse * SPARKS.perKick + (this.audio.level > 0.3 ? 0.5 : 0)) * step;
+    this.spawnDebt += (pulse * SPARKS.perKick + (level > 0.3 ? 0.5 : 0)) * step;
     for (; this.spawnDebt >= 1 && s.n < SPARKS.max; this.spawnDebt--) {
       const k = Math.floor(Math.random() * x.length), i = s.n++;
-      const speed = (1 + Math.random() * 4) * (0.5 + this.audio.pulse) * SPARKS.speed * dpr, turn = (Math.random() - 0.5) * 0.8;
+      const speed = (1 + Math.random() * 4) * (0.5 + pulse) * SPARKS.speed * dpr, turn = (Math.random() - 0.5) * 0.8;
       s.x[i] = box.cx + x[k] * box.half; s.y[i] = box.cy + y[k] * box.half;
       s.vx[i] = (dx[k] * Math.cos(turn) - dy[k] * Math.sin(turn)) * speed;
       s.vy[i] = (dx[k] * Math.sin(turn) + dy[k] * Math.cos(turn)) * speed;
       s.life[i] = 1; s.r[i] = (1 + Math.random() * 2.5) * dpr;
+      s.spin[i] = (Math.random() < 0.5 ? -1 : 1) * SPARKS.spin * (0.5 + Math.random());
     }
     this.spawnDebt = Math.min(this.spawnDebt, 1);
     const { g } = this, drag = decay(SPARKS.drag, dt);
     g.globalCompositeOperation = 'lighter';
-    g.fillStyle = color;
+    this.drawShocks(box, dpr, color, step);
+    g.lineCap = 'round';
     for (let i = 0; i < s.n; i++) {
+      // Curl: turn the velocity a little each frame
+      const a = s.spin[i] * step, cos = Math.cos(a), sin = Math.sin(a), vx = s.vx[i];
+      s.vx[i] = (vx * cos - s.vy[i] * sin) * drag; s.vy[i] = (vx * sin + s.vy[i] * cos) * drag;
       s.x[i] += s.vx[i] * step; s.y[i] += s.vy[i] * step;
-      s.vx[i] *= drag; s.vy[i] *= drag;
       s.life[i] -= SPARKS.life * step;
       if (s.life[i] <= 0) {
         // Move the last spark into this slot and look at the slot again
         const last = --s.n;
-        s.x[i] = s.x[last]; s.y[i] = s.y[last]; s.vx[i] = s.vx[last]; s.vy[i] = s.vy[last]; s.life[i] = s.life[last]; s.r[i] = s.r[last];
+        s.x[i] = s.x[last]; s.y[i] = s.y[last]; s.vx[i] = s.vx[last]; s.vy[i] = s.vy[last];
+        s.life[i] = s.life[last]; s.r[i] = s.r[last]; s.spin[i] = s.spin[last];
         i--;
         continue;
       }
+      // A streak as long as the spark is fast, white while it is young
+      g.strokeStyle = s.life[i] > SPARKS.hot ? '#fff' : color;
       g.globalAlpha = this.opacity * s.life[i];
+      g.lineWidth = s.r[i] * 2 * (0.4 + 0.6 * s.life[i]);
       g.beginPath();
-      g.arc(s.x[i], s.y[i], s.r[i], 0, Math.PI * 2);
-      g.fill();
+      g.moveTo(s.x[i] - s.vx[i] * SPARKS.trail, s.y[i] - s.vy[i] * SPARKS.trail);
+      g.lineTo(s.x[i], s.y[i]);
+      g.stroke();
     }
+  }
+
+  // Outlines of the artwork running outwards, thinning and fading
+  private drawShocks(box: { cx: number; cy: number; half: number }, dpr: number, color: string, step: number) {
+    const { g } = this;
+    g.strokeStyle = color;
+    for (const shock of this.shocks) {
+      shock.size += SHOCK.speed * step * (1 + shock.life);
+      shock.life -= SHOCK.life * step;
+      if (shock.life <= 0) continue;
+      const h = box.half * shock.size;
+      g.globalAlpha = this.opacity * shock.life * 0.7;
+      g.lineWidth = (1 + 5 * shock.life) * dpr;
+      g.beginPath();
+      g.roundRect(box.cx - h, box.cy - h, 2 * h, 2 * h, h * RING_CORNER);
+      g.stroke();
+    }
+    this.shocks = this.shocks.filter((shock) => shock.life > 0);
   }
 
   // Soft lights drifting over the background, brighter and larger with the bass and the kicks
