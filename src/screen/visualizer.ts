@@ -44,12 +44,30 @@ export class SpectrumView {
 
   constructor(private canvas: HTMLCanvasElement, private cover: HTMLElement, private audio: AudioAnalyser, private accent: () => string) {
     this.g = canvas.getContext('2d')!;
-    this.resize = new ResizeObserver(([entry]) => {
-      this.cssWidth = entry.contentRect.width;
-      this.cssHeight = entry.contentRect.height;
+    // Sizes and the artwork's place are read only here, when something in the player changes size:
+    // the layout is already up to date then, so reading it costs nothing. Reading it every frame
+    // would make the browser lay out all of Nuclear's page again each time.
+    this.resize = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target !== canvas) continue;
+        this.cssWidth = entry.contentRect.width;
+        this.cssHeight = entry.contentRect.height;
+      }
+      this.measureCover();
       this.dirty = true;
     });
     this.resize.observe(canvas);
+    this.resize.observe(cover);
+    // The artwork also moves when the panels beside it (lyrics) appear or change size
+    const stage = cover.closest('.stage');
+    if (stage) for (const part of Array.from(stage.children)) this.resize.observe(part);
+  }
+
+  // The artwork's centre on the canvas and half its size (CSS pixels), without the tilt and beat transforms
+  private coverAt = { cx: 0, cy: 0, half: 0 };
+  private measureCover() {
+    const box = this.cover.getBoundingClientRect(), area = this.canvas.getBoundingClientRect();
+    this.coverAt = { cx: box.left + box.width / 2 - area.left, cy: box.top + box.height / 2 - area.top, half: this.cover.offsetWidth / 2 };
   }
 
   get visible() { return this.mode !== 'off'; }
@@ -237,11 +255,9 @@ export class SpectrumView {
   // Where the artwork sits on the canvas (canvas pixels): its centre, half its size without the
   // tilt and beat transforms, and the canvas size
   private coverBox(dpr: number) {
-    const half = (this.cover.offsetWidth / 2) * dpr;
+    const { cx, cy, half } = this.coverAt;
     if (!half) return null;
-    const box = this.cover.getBoundingClientRect(), area = this.canvas.getBoundingClientRect();
-    const cx = (box.left + box.width / 2 - area.left) * dpr, cy = (box.top + box.height / 2 - area.top) * dpr;
-    return { cx, cy, half, w: area.width * dpr, h: area.height * dpr };
+    return { cx: cx * dpr, cy: cy * dpr, half: half * dpr, w: this.cssWidth * dpr, h: this.cssHeight * dpr };
   }
 
   // Wave heights: bass at both edges and treble in the middle, with a light blur across
