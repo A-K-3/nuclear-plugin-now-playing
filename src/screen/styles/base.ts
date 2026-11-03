@@ -1,5 +1,5 @@
 // Root, reset, buttons, inputs and the two-column layout
-import { R } from './root';
+import { COVERING_CLASS, R } from './root';
 
 export default `
 ${R} { --fg:#fff; --dim:rgba(255,255,255,.62); --faint:rgba(255,255,255,.13); --accent:#fff; --tint:40,40,48; --blur:80px; --cover-r:16px;
@@ -7,6 +7,8 @@ ${R} { --fg:#fff; --dim:rgba(255,255,255,.62); --faint:rgba(255,255,255,.13); --
   font-family:"Segoe UI",Arial,sans-serif; -webkit-font-smoothing:antialiased; user-select:none; display:none; }
 ${R}.open { display:block; animation:npx-in .25s ease-out; }
 @keyframes npx-in { from { opacity:0 } to { opacity:1 } }
+/* While the screen is open, the rest of the page (Nuclear) is not rendered at all; see COVERING_CLASS */
+html.${COVERING_CLASS} body > :not(${R}) { content-visibility:hidden; }
 ${R} * { box-sizing:border-box; margin:0; padding:0; }
 ${R} button { background:none; border:0; color:var(--fg); cursor:pointer; padding:6px; opacity:.85; position:relative;
   transition:opacity .2s, transform .1s, color .2s; font:inherit; }

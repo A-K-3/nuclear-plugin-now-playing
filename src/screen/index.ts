@@ -23,7 +23,7 @@ import { LyricsPanel } from './lyrics';
 import { createQuickSettings } from './quick-settings';
 import { QueuePanel } from './queue';
 import { PlayerState } from './state';
-import { CSS, ROOT_ID } from './styles/index';
+import { COVERING_CLASS, CSS, ROOT_ID } from './styles/index';
 import { queryIn, restartAnimation, setOn, template } from './template';
 import { UpNext } from './up-next';
 import { SpectrumView } from './visualizer';
@@ -33,6 +33,7 @@ const IDLE_MS = 3000; // without mouse movement: hide the cursor and controls, l
 const MODES_POLL_MS = 1000;
 const CLOCK_MS = 5000;
 const TOAST_MS = 3500;
+const COVER_DELAY_MS = 300; // the screen's fade-in (.25 s) has finished
 
 export function createScreen(api: NuclearPluginAPI) {
   const style = document.createElement('style');
@@ -300,6 +301,10 @@ export function createScreen(api: NuclearPluginAPI) {
     if (session) return;
     const scope = session = new Scope();
     root.classList.add('open');
+    // Nuclear's own page is covered: let the browser skip styling, laying out and painting it (with a
+    // long queue it is thousands of elements). Once the screen has faded in; shown again on close.
+    const covering = window.setTimeout(() => document.documentElement.classList.add(COVERING_CLASS), COVER_DELAY_MS);
+    scope.add(() => { clearTimeout(covering); document.documentElement.classList.remove(COVERING_CLASS); });
     root.scrollTop = 0;
     queue.reset(); controls.reset(); lastCurrentId = null;
     controls.refreshModes();
@@ -316,7 +321,7 @@ export function createScreen(api: NuclearPluginAPI) {
       .then((custom) => { if (scope.active) root.classList.toggle('custom-titlebar', !!custom && appWindow.available); })
       .catch(() => {});
     renderTrack(); queue.render(true);
-    scope.add(api.Queue.subscribe((qu) => { state.queue = qu; renderTrack(); queue.render(); }));
+    scope.add(api.Queue.subscribe((qu) => { state.queue = qu; renderTrack(); queue.scheduleRender(); }));
     scope.add(api.Playback.subscribe((s) => { onPlayback(s); queue.renderCount(); }));
     try { scope.add(api.Favorites.subscribe(() => refreshFav())); } catch { /* favorites unavailable */ }
     scope.interval(() => controls.refreshModes(), MODES_POLL_MS);

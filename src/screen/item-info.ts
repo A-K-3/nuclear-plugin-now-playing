@@ -4,7 +4,11 @@ import type { QueueItem, Track } from '@nuclearplayer/plugin-sdk';
 import { norm } from '../lib/format';
 import { coverFor, display } from '../lib/track';
 
-type ItemInfo = { track: Track; title: string; artist: string; search: string; thumb: string };
+type ItemInfo = { track: Track; sig: string; title: string; artist: string; search: string; thumb: string };
+
+// What the display data depends on; Nuclear may hand over a new copy of an unchanged track
+const signature = (t: Track | undefined) =>
+  `${t?.title}|${(t?.artists || []).map((a) => a.name).join(',')}|${t?.album?.title}|${t?.artwork?.items?.length}|${t?.artwork?.items?.[0]?.url}`;
 
 export class ItemInfoCache {
   private cache = new Map<string, ItemInfo>();
@@ -12,9 +16,11 @@ export class ItemInfoCache {
   get(item: QueueItem): ItemInfo {
     const cached = this.cache.get(item.id);
     if (cached && cached.track === item.track) return cached;
+    const sig = signature(item.track);
+    if (cached && cached.sig === sig) { cached.track = item.track; return cached; }
     const d = display(item.track);
     const info = {
-      track: item.track, title: d.title, artist: d.artist,
+      track: item.track, sig, title: d.title, artist: d.artist,
       search: norm(`${d.title} ${d.artist} ${item.track?.album?.title || ''}`), thumb: coverFor(item.track, false),
     };
     this.cache.set(item.id, info);

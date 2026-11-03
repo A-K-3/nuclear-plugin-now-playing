@@ -23,6 +23,7 @@ export class QueuePanel {
   private lastCur = -1;
   private upcomingSecs = 0; // total duration of the songs after the current one
   private dragFrom = -1;
+  private pending = 0;
   private el;
 
   constructor(
@@ -47,7 +48,13 @@ export class QueuePanel {
   get saveOpen() { return this.el.save.classList.contains('show'); }
 
   // Forces the next render to rebuild the list (the screen was closed meanwhile)
-  reset() { this.lastKey = ''; this.lastCur = -1; }
+  reset() { this.lastKey = ''; this.lastCur = -1; cancelAnimationFrame(this.pending); this.pending = 0; }
+
+  // Renders once on the next frame however many queue updates arrive before it (Nuclear sends a
+  // burst of them on each track change)
+  scheduleRender() {
+    if (!this.pending) this.pending = requestAnimationFrame(() => { this.pending = 0; this.render(); });
+  }
 
   // "X / N · time left" counter: cheap, also refreshed on every playback event
   renderCount() {
@@ -62,7 +69,9 @@ export class QueuePanel {
     const { items, currentIndex: cur } = this.state.queue;
     this.upcomingSecs = items.slice(cur + 1).reduce((s, it) => s + (it.track?.durationMs || 0) / 1000, 0);
     this.renderCount();
-    const key = JSON.stringify([cur, this.filter, items.map((i) => [i.id, i.status])]);
+    // Only what the list shows: the order, the current one, the filter and which items failed. Nuclear
+    // sends several queue updates per track (stream status changes) that change none of these.
+    const key = JSON.stringify([cur, this.filter, items.map((i) => (i.status === 'error' ? `!${i.id}` : i.id))]);
     if (key === this.lastKey && !forceScroll) return;
     const curChanged = cur !== this.lastCur;
     this.lastKey = key; this.lastCur = cur;
